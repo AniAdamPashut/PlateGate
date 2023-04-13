@@ -37,7 +37,7 @@ class GovApiFetcher:
         return False
 
     @classmethod
-    def is_car_active(cls, plate_number) # FIXME
+    def is_car_active(cls, plate_number):  # FIXME
         query = {'licensePlate': str(plate_number)}
         response = requests.post('https://www.gov.il/Api/Police/stolencar/api/sc/sc/', data=json.dumps(query))
         print(response)
