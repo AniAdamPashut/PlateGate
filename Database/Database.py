@@ -1,21 +1,21 @@
 import random
 import mysql.connector
-import logging
 import string
 import hashlib
 
 
-"""
-Remember to export DB
-"""
-
-class PlateGateDB():
+class PlateGateDB:
     def __init__(self):
         self.__cur = None
         self.__hostname = 'localhost'
         self.__username = 'root'
         self.__passwd = ''
         self.__db_name = 'plategatedb'
+
+    def validate_car(self, car):
+        if car.totaled: return False
+        db_row = self.select_all_where('cars', plate_number=car.plate_number)
+        
 
     def _open(self):
         self.__conn = mysql.connector.connect(
@@ -24,7 +24,7 @@ class PlateGateDB():
             password=self.__passwd,
             database=self.__db_name
         )
-        self.__cur = self.__conn.cursor()
+        self.__cur = self.__conn.cursor(dictionary=True)
 
     def _close(self):
         self.__cur.close()
@@ -49,8 +49,7 @@ class PlateGateDB():
         query = f"SELECT * FROM {table_name} WHERE "
         for col in kwargs.keys():
             query += f"{col}=%s,"
-        query = query[:-1]
-        query += ';'
+        query[-1] = ';'
         print(query)
         print(tuple(kwargs.values()))
         self.__cur.execute(query, tuple(kwargs.values()))
@@ -71,7 +70,6 @@ class PlateGateDB():
         val = self.__cur.fetchall()
         self._close()
         return val
-
 
     def _generate_salt(self):
         return ''.join(random.choice(string.ascii_letters) for _ in range(20))
@@ -108,10 +106,10 @@ class PlateGateDB():
 
     def _generate_company_id(self):
         company_id = random.randint(100_000, 1_000_000)
-        is_exists = self.select_all_where(table_name, company_id=company_id)
+        is_exists = self.select_all_where('companies', company_id=company_id)
         while is_exists:
             company_id = random.randint(100_000, 1_000_000)
-            is_exists = self.select_all_where(table_name, company_id=company_id)
+            is_exists = self.select_all_where('companies', company_id=company_id)
         return company_id
 
     def _configure_users_parameters(self, kwargs):
@@ -145,11 +143,10 @@ class PlateGateDB():
             kwargs['company_name']
         except KeyError:
             raise KeyError("Please insert both manager_id and or company_name")
-            return False
         else:
             company_id = self._generate_company_id()
             kwargs['company_id'] = company_id
-            self.update('users', kwargs['manager_id'], user_state=2)
+            self.update('users', id_number=kwargs['manager_id'], user_state=2)
         finally:
             return kwargs
 
@@ -194,10 +191,10 @@ class PlateGateDB():
             kwargs = self._insert_new_car(**kwargs)
         elif table_name == 'companies':
             kwargs = self._insert_new_company(**kwargs)
-        else: return False
+        else:
+            return False
 
         return self._insert_kwargs(table_name, kwargs)
-
 
     def update(self, table_name: str, **kwargs):
         print(kwargs)
@@ -228,25 +225,26 @@ class PlateGateDB():
             return updated
 
     def delete_user(self, pk_key: str):
-        return self.update('users', pk_key, user_state=-1)
+        return self.update('users', id_number=pk_key, user_state=-1)
+
 
 class Validator:
     @staticmethod
-    def validate_id(id: str):
+    def validate_id(id_number: str):
         try:
-            int(id)
+            int(id_number)
         except ValueError:
             raise ValueError("Please insert a string made up from digits")
-        if not id:
+        if not id_number:
             return False
-        if len(id) > 9: return False
-        if len(id) < 9:
-            id = "00000000" + id
-            id = id[-9:]
-            print(id)
+        if len(id_number) > 9: return False
+        if len(id_number) < 9:
+            id_number = "00000000" + id_number
+            id_number = id_number[-9:]
+            print(id_number)
         validator = "121212121"
         array = []
-        for id_num, validating_num in zip(id, validator):
+        for id_num, validating_num in zip(id_number, validator):
             num = int(id_num) * int(validating_num)
             if num > 10:
                 num = num % 10 + num // 10
