@@ -6,41 +6,36 @@ import hashlib
 
 class PlateGateDB:
     def __init__(self):
-        self.__cur = None
-        self.__hostname = 'localhost'
-        self.__username = 'root'
-        self.__passwd = ''
-        self.__db_name = 'plategatedb'
-
-    def validate_car(self, car):
-        if car.totaled: return False
-        db_row = self.select_all_where('cars', plate_number=car.plate_number)
-        
+        self._cur = None
+        self._hostname = 'localhost'
+        self._username = 'root'
+        self._passwd = ''
+        self._db_name = 'PlateGateDB'
 
     def _open(self):
-        self.__conn = mysql.connector.connect(
-            host=self.__hostname,
-            user=self.__username,
-            password=self.__passwd,
-            database=self.__db_name
+        self._conn = mysql.connector.connect(
+            host=self._hostname,
+            user=self._username,
+            password=self._passwd,
+            database=self._db_name
         )
-        self.__cur = self.__conn.cursor(dictionary=True)
+        self._cur = self._conn.cursor(dictionary=True)
 
     def _close(self):
-        self.__cur.close()
-        self.__conn.close()
+        self._cur.close()
+        self._conn.close()
 
     def select_all(self, table_name: str):
         self._open()
-        self.__cur.execute(f"SELECT * FROM {table_name};")
-        val = self.__cur.fetchall()
+        self._cur.execute(f"SELECT * FROM {table_name};")
+        val = self._cur.fetchall()
         self._close()
         return val
 
     def _select_salt(self, table_name: str, id_number: str):
         self._open()
-        self.__cur.execute(f"SELECT salt FROM {table_name} WHERE id_nubmer='{id_number}';")
-        val = self.__cur.fetchall()
+        self._cur.execute(f"SELECT salt FROM {table_name} WHERE id_nubmer='{id_number}';")
+        val = self._cur.fetchall()
         self._close()
         return val
 
@@ -49,35 +44,37 @@ class PlateGateDB:
         query = f"SELECT * FROM {table_name} WHERE "
         for col in kwargs.keys():
             query += f"{col}=%s,"
-        query[-1] = ';'
-        print(query)
-        print(tuple(kwargs.values()))
-        self.__cur.execute(query, tuple(kwargs.values()))
-        val = self.__cur.fetchall()
+        query = query[:-1]
+        query += ';'
+        self._cur.execute(query, tuple(kwargs.values()))
+        val = self._cur.fetchall()
         self._close()
         return val
 
     def show_tables(self):
         self._open()
-        self.__cur.execute("SHOW TABLES;")
-        val = self.__cur.fetchall()
+        self._cur.execute("SHOW TABLES;")
+        val = self._cur.fetchall()
         self._close()
         return val
 
     def show_databases(self):
         self._open()
-        self.__cur.execute("SHOW DATABASES;")
-        val = self.__cur.fetchall()
+        self._cur.execute("SHOW DATABASES;")
+        val = self._cur.fetchall()
         self._close()
         return val
 
-    def _generate_salt(self):
+    @staticmethod
+    def _generate_salt():
         return ''.join(random.choice(string.ascii_letters) for _ in range(20))
 
-    def _hash_password(self, password: str, salt: str):
+    @staticmethod
+    def _hash_password(password: str, salt: str):
         return hashlib.sha256(str(password + salt).encode()).hexdigest()
 
-    def _validate_params_user(self, kwargs):
+    @staticmethod
+    def _validate_params_user(kwargs):
         try:
             kwargs['id_number']
             kwargs['fname']
@@ -88,14 +85,16 @@ class PlateGateDB:
         finally:
             return kwargs
 
-    def _validate_values(self, kwargs):
+    @staticmethod
+    def _validate_values(kwargs):
         if not Validator.validate_id(kwargs['id_number']):
             raise ValueError("Id is not valid")
         if not Validator.validate_name(kwargs['fname']) or not Validator.validate_name(kwargs['lname']):
             raise ValueError("User First or Last name are not valid")
         return kwargs
 
-    def _figure_user_state(self, kwargs):
+    @staticmethod
+    def _figure_user_state(kwargs):
         try:
             kwargs['company_id']
         except KeyError:
@@ -163,8 +162,8 @@ class PlateGateDB:
         self._open()
         inserted = False
         try:
-            val = self.__cur.execute(query, tuple(kwargs.values()))
-            self.__conn.commit()
+            val = self._cur.execute(query, tuple(kwargs.values()))
+            self._conn.commit()
         except Exception as err:
             raise err
         else:
@@ -187,7 +186,7 @@ class PlateGateDB:
         print(kwargs)
         if table_name == 'users':
             kwargs = self._insert_new_user(kwargs)
-        elif table_name == 'cars':
+        elif table_name == 'vehicles':
             kwargs = self._insert_new_car(**kwargs)
         elif table_name == 'companies':
             kwargs = self._insert_new_company(**kwargs)
@@ -213,8 +212,8 @@ class PlateGateDB:
         updated = False
         try:
             self._open()
-            self.__cur.execute(query, tuple(kwargs.values()))
-            self.__conn.commit()
+            self._cur.execute(query, tuple(kwargs.values()))
+            self._conn.commit()
         except Exception as err:
             print(str(err))
             raise err
@@ -237,7 +236,8 @@ class Validator:
             raise ValueError("Please insert a string made up from digits")
         if not id_number:
             return False
-        if len(id_number) > 9: return False
+        if len(id_number) > 9:
+            return False
         if len(id_number) < 9:
             id_number = "00000000" + id_number
             id_number = id_number[-9:]

@@ -17,6 +17,8 @@ fuel_map = {
     'דיזל': SugDelek.DIESEL,
     'חשמל': SugDelek.ELECTRIC,
     'חשמל/בנזין': SugDelek.BENZIN_ELECTRIC,
-    'חשמל/דיזל': SugDelek.DIESEL_ELECTRIC
+    'חשמל/דיזל': SugDelek.DIESEL_ELECTRIC,
+    'גז טבעי דחוס': SugDelek.UNKNOWN,
+    'לא ידוע קוד 0': SugDelek.UNKNOWN
 }
 
