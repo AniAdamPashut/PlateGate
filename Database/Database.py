@@ -162,7 +162,7 @@ class PlateGateDB:
         self._open()
         inserted = False
         try:
-            val = self._cur.execute(query, tuple(kwargs.values()))
+            self._cur.execute(query, tuple(kwargs.values()))
             self._conn.commit()
         except Exception as err:
             raise err

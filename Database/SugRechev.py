@@ -2,15 +2,15 @@ from enum import Enum
 
 
 class SugRechev(Enum):
-    UNKNOWN = 0,  # לא ידוע
-    PRIVATE = 1,  # רכב פרטי
-    COMMERCIAL = 2,  # רכב מסחרי
-    TRACTOR = 3,  # טרקטור
-    WORK_VEHICLE = 4,  # רכב עבודה (שופל)
-    BUS = 5,  # אוטובוס
-    TAXI = 6,  # מונית
-    CARRY = 7,  # משא
-    CARRIED = 8,  # גרור
+    UNKNOWN = 0  # לא ידוע
+    PRIVATE = 1  # רכב פרטי
+    COMMERCIAL = 2  # רכב מסחרי
+    TRACTOR = 3  # טרקטור
+    WORK_VEHICLE = 4  # רכב עבודה (שופל)
+    BUS = 5  # אוטובוס
+    TAXI = 6  # מונית
+    CARRY = 7  # משא
+    CARRIED = 8  # גרור
     MOTORCYCLE = 9  # אופנוע
 
 

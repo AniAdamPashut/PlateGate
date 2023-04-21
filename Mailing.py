@@ -43,6 +43,7 @@ class Mailer:
         try:
             print('test1')
             self._conn.sendmail(self._user, dest, msg.as_string())
+            print('test2')
         except Exception as err:
             print(str(err))
         finally:
