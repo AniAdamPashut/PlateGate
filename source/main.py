@@ -1,12 +1,14 @@
-from Mailing import Mailer
 from dotenv import dotenv_values
-from GovAPI.fetch import GovApiFetcher
+from source.Recongnize import Recognizer
+import cv2
+
 
 CONFIG = dotenv_values('../.env')
 
 
 def window():
-    pass
+    number = Recognizer.recognize_from_image(cv2.imread())
+    print(number)
 
 
 if __name__ == '__main__':
