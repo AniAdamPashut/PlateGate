@@ -32,12 +32,26 @@ class PlateGateDB:
         self._close()
         return val
 
-    def _select_salt(self, table_name: str, id_number: str):
+    def select_salt(self, table_name: str, id_number: str):
         self._open()
-        self._cur.execute(f"SELECT salt FROM {table_name} WHERE id_nubmer='{id_number}';")
-        val = self._cur.fetchall()
+        self._cur.execute(f"SELECT salt FROM {table_name} WHERE id_number='{id_number}';")
+        val = self._cur.fetchone()
         self._close()
-        return val
+        return val['salt']
+
+    def get_hashed_password(self, table_name, id_number: str) -> str:
+        self._open()
+        self._cur.execute(f"SELECT password FROM {table_name} WHERE id_number='{id_number}';")
+        val = self._cur.fetchone()
+        self._close()
+        return val['password']
+
+    def get_email(self, table_name: str, id_number: str) -> str:
+        self._open()
+        self._cur.execute(f"SELECT email FROM {table_name} WHERE id_number='{id_number}'")
+        val = self._cur.fetchone()
+        self._close()
+        return val['email']
 
     def select_all_where(self, table_name: str, **kwargs):
         self._open()
@@ -201,7 +215,7 @@ class PlateGateDB:
         value = kwargs.pop(key)
         query = f"UPDATE {table_name} SET "
         if 'password' in kwargs.keys():
-            salt = self._select_salt(table_name, key)
+            salt = self.select_salt(table_name, key)
             hashed = hashlib.sha256((kwargs['password'] + salt).encode()).hexdigest()
             kwargs['password'] = hashed
         for col in kwargs.keys():

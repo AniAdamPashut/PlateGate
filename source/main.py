@@ -3,7 +3,7 @@ from source.Recongnize import Recognizer
 import cv2
 
 
-CONFIG = dotenv_values('../.env')
+CONFIG = dotenv_values('.env')
 
 
 def window():

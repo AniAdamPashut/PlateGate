@@ -16,10 +16,7 @@ class Mailer:
         self._password = passw
 
     def _login(self):
-        try:
-            self._conn.login(self._user, self._password)
-        except BaseException:
-            raise
+        self._conn.login(self._user, self._password)
 
     def _open_server(self):
         conn = SMTP(self._host, self._port)
@@ -28,22 +25,16 @@ class Mailer:
         self._login()
 
     def _close_server(self):
-        try:
-            self._conn.quit()
-        except BaseException:
-            raise
+        self._conn.quit()
 
     def mailto(self, dest: list[str], subject: str, body: str):
         msg = MIMEText(body)
         msg['Subject'] = subject
         msg['From'] = self._user
-        print('test0')
 
         self._open_server()
         try:
-            print('test1')
             self._conn.sendmail(self._user, dest, msg.as_string())
-            print('test2')
         except Exception as err:
             print(str(err))
         finally:
