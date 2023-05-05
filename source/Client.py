@@ -24,8 +24,6 @@ def extract_parameters(data: bytes) -> dict[str, bytes]:
     for parameter in data.split(b"~~~"):
         if SEP in parameter:
             parameter = parameter.split(SEP)
-            if len(parameter) > 2:
-                return
             name, value = parameter
             request_parameters[name.decode()] = value
     return request_parameters
@@ -40,12 +38,13 @@ def create_message(sender: bytes, method: bytes, parameters: dict) -> bytes:
 
 
 class Client:
-    def __init__(self, ip: str, port: int, type: bytes):
-        self.type = type
+    def __init__(self, ip: str, port: int, client_type: bytes):
+        self.type = client_type
         self._ip = ip
         self._port = port
         self._seed = None
         self._server_public_key = None
+        self._private_key = None
         self._do_handshake()
 
     def _do_handshake(self):
@@ -72,6 +71,7 @@ class Client:
         self._seed = shared
         logger.info("Diffie finished")
 
+
     def _do_xor(self):
         logger.info("Xor started")
         pubkey, privkey = rsa.newkeys(2048)
@@ -87,6 +87,7 @@ class Client:
         xorer = XORer(self._seed)
         encrypted_message = xorer.do_xor(msg) + MESSAGE_END
         with socket.create_connection((self._ip, self._port)) as sock:
+            print(msg)
             sock.send(encrypted_message)
             data = sock.recv(1024)
             while not data[-len(MESSAGE_END):] == MESSAGE_END:
@@ -94,6 +95,7 @@ class Client:
             data = data[:-len(MESSAGE_END)]
             decrypted = xorer.do_xor(data)
             request_parameters = extract_parameters(decrypted)
+            logger.info("Data recved: " + str(data))
 
         n = int.from_bytes(request_parameters['NVALUE'], 'big')
         e = int.from_bytes(request_parameters['EVALUE'], 'big')
@@ -107,7 +109,7 @@ class Client:
         finally:
             logger.info("Xor Ended")
 
-    def login(self, identifier: str, password: str):
+    def login(self, identifier: str, password: str) -> bool:
         logger.info("LOGIN STARTED")
         msg = create_message(self.type, b"LOGIN", {
             b"IDENTIFIER": identifier.encode(),
@@ -115,8 +117,14 @@ class Client:
         })
         with socket.create_connection((self._ip, self._port)) as sock:
             encrypted = rsa.encrypt(msg, self._server_public_key) + MESSAGE_END
+            print("Data sent: " + str(encrypted))
             sock.send(encrypted)
             data = sock.recv(1024)
+            while data[-len(MESSAGE_END):] != MESSAGE_END:
+                data += sock.recv(1024)
+            data = data[:-len(MESSAGE_END)]
+            print("Data received: " + str(data))
+            logger.info("Data recved: " + str(data))
             try:
                 decryted = rsa.decrypt(data, self._private_key)
             except rsa.pkcs1.DecryptionError:
@@ -124,6 +132,8 @@ class Client:
         parameters = extract_parameters(decryted)
         if parameters['SUCCESS']:
             print('logged in')
+            return True
+        return False
 
     def signup(self,
                identifier: str,
@@ -144,22 +154,29 @@ class Client:
         logger.info(msg)
         with socket.create_connection((self._ip, self._port)) as sock:
             encrypted = rsa.encrypt(msg, self._server_public_key) + MESSAGE_END
+            print("Data sent: " + str(encrypted))
             sock.send(encrypted)
             data = sock.recv(1024)
+            while data[-len(MESSAGE_END):] != MESSAGE_END:
+                data += sock.recv(1024)
+            data = data[:-len(MESSAGE_END)]
+            print("Data received: " + str(data))
             try:
                 decrypted = rsa.decrypt(data, self._private_key)
             except rsa.pkcs1.DecryptionError:
                 logging.error("How did we got here?")
 
         parameters = extract_parameters(decrypted)
-        if parameters['SUCCESS']:
-            print('signed up')
+        try:
+            if parameters['SUCCESS']:
+                print('signed up')
+                return True
+            print("didnt signed up")
+            return False
+        except KeyError:
+            return False
 
 
 moshe = Client('127.0.0.1', 1337, b"USER")
-moshe.signup('330816042',
-             'Eyal',
-             'Squeak',
-             'eyal123',
-             '900164',
-             'hidataman2024@gmail.com')
+moshe.login('210040010',
+             'Matan02',)

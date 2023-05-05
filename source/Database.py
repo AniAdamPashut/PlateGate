@@ -204,6 +204,8 @@ class PlateGateDB:
             kwargs = self._insert_new_car(**kwargs)
         elif table_name == 'companies':
             kwargs = self._insert_new_company(**kwargs)
+        elif table_name == 'entries':
+            kwargs = self._extract_entries_kwargs(**kwargs)
         else:
             return False
 
@@ -239,6 +241,27 @@ class PlateGateDB:
 
     def delete_user(self, pk_key: str):
         return self.update('users', id_number=pk_key, user_state=-1)
+
+    def _extract_entries_kwargs(self, **kwargs) -> dict:
+        try:
+            kwargs['car_id']
+            kwargs['person_id']
+        except KeyError:
+            raise KeyError("Please insert both person id and or car plate number")
+        else:
+            entry_id = self._generate_entry_id()
+            kwargs['entry_id'] = entry_id
+        finally:
+            return kwargs
+
+    def _generate_entry_id(self):
+        entry_id = random.randint(1_000_000, 10_000_000)
+        is_exists = self.select_all_where('entries', entry_id=entry_id)
+        while is_exists:
+            entry_id = random.randint(1_000_000, 10_000_000)
+            is_exists = self.select_all_where('entries', entry_id=entry_id)
+        return entry_id
+
 
 
 class Validator:

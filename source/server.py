@@ -4,8 +4,6 @@ import socket
 import sys
 import threading
 import hashlib
-import time
-
 import rsa
 import Database
 import Mailing
@@ -97,6 +95,7 @@ class Server:
         })
         client.send(msg)
         seed = dh.generate_shared_key(request_parameters['PUBLIC'])
+        print(seed)
         self._clients[client_id][SEED] = seed
 
     @protocol(b"XOR")
@@ -107,6 +106,7 @@ class Server:
         self._clients[client_id][RSA_PRIVATE_KEY] = privkey
         xorer = XORer(self._clients[client_id][SEED])
         decrypted = xorer.do_xor(data)
+        print(decrypted)
         request_parameters = extract_parameters(decrypted)
         n = int.from_bytes(request_parameters['NVALUE'], 'big')
         e = int.from_bytes(request_parameters['EVALUE'], 'big')
@@ -146,7 +146,8 @@ class Server:
         msg = create_message(b"SRVR", b"LOGIN", {
             b"SUCCESS": succeed.to_bytes(succeed.bit_length(), 'big')
         })
-        encrypted = rsa.encrypt(msg, clients_public_key)
+        print("LOGIN succeed?", succeed)
+        encrypted = rsa.encrypt(msg, clients_public_key) + MESSAGE_END
         client.send(encrypted)
 
     @protocol(b"SIGNUP")
@@ -184,8 +185,10 @@ class Server:
             msg = create_message(b"SRVR", b"SIGNUP", {
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big')
             })
-        encrypted = rsa.encrypt(msg, client_public_key)
+        encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+        print(encrypted)
         client.send(encrypted)
+        print("SIGNUP END")
 
     def _handle_client(self, client, addr):
         client_id = hashlib.sha256(str(addr[0]).encode()).hexdigest()
@@ -226,6 +229,7 @@ class Server:
 
         self.KNOWN_REQUESTS[function](client_id, client, decrypted)
         client.close()
+        del self._clients[client_id]
         self._client_count -= 1
 
     def mainloop(self):
