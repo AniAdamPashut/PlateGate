@@ -1,3 +1,4 @@
+import hashlib
 import os
 import socket
 import rsa
@@ -71,7 +72,6 @@ class Client:
         self._seed = shared
         logger.info("Diffie finished")
 
-
     def _do_xor(self):
         logger.info("Xor started")
         pubkey, privkey = rsa.newkeys(2048)
@@ -109,7 +109,7 @@ class Client:
         finally:
             logger.info("Xor Ended")
 
-    def login(self, identifier: str, password: str) -> bool:
+    def login(self, identifier: str, password: str) -> str:
         logger.info("LOGIN STARTED")
         msg = create_message(self.type, b"LOGIN", {
             b"IDENTIFIER": identifier.encode(),
@@ -117,13 +117,11 @@ class Client:
         })
         with socket.create_connection((self._ip, self._port)) as sock:
             encrypted = rsa.encrypt(msg, self._server_public_key) + MESSAGE_END
-            print("Data sent: " + str(encrypted))
             sock.send(encrypted)
             data = sock.recv(1024)
             while data[-len(MESSAGE_END):] != MESSAGE_END:
                 data += sock.recv(1024)
             data = data[:-len(MESSAGE_END)]
-            print("Data received: " + str(data))
             logger.info("Data recved: " + str(data))
             try:
                 decryted = rsa.decrypt(data, self._private_key)
@@ -132,8 +130,8 @@ class Client:
         parameters = extract_parameters(decryted)
         if parameters['SUCCESS']:
             print('logged in')
-            return True
-        return False
+            return parameters['AUTHORIZATION_CODE'].decode()
+        return ''
 
     def signup(self,
                identifier: str,
@@ -141,7 +139,7 @@ class Client:
                lname: str,
                password: str,
                company_id: str,
-               email: str):
+               email: str) -> str:
         logger.info("LOGIN STARTED")
         msg = create_message(self.type, b"SIGNUP", {
             b"IDENTIFIER": identifier.encode(),
@@ -170,13 +168,73 @@ class Client:
         try:
             if parameters['SUCCESS']:
                 print('signed up')
-                return True
+                return parameters['AUTHORIZATION_CODE'].decode()
             print("didnt signed up")
-            return False
+            return ''
         except KeyError:
+            return ''
+
+    def get_user_info(self, auth_code: str, identifier: str):
+        logger.info("Getting user info")
+        msg = create_message(b"USER", b"USERINFO", {
+            b"AUTHORIZATION_CODE": auth_code.encode(),
+            b"IDENTIFIER": identifier.encode()
+        })
+        encrypted = rsa.encrypt(msg, self._server_public_key) + MESSAGE_END
+        with socket.create_connection((self._ip, self._port)) as sock:
+            logger.info(msg)
+            sock.send(encrypted)
+            data = sock.recv(1024)
+            while not data.endswith(MESSAGE_END):
+                data += sock.recv(1024)
+            data = data[:-len(MESSAGE_END)]
+            try:
+                decrypted = rsa.decrypt(data, self._private_key)
+                logger.info(decrypted)
+            except rsa.pkcs1.DecryptionError:
+                logger.error("How did we got here?")
+
+        parameters = extract_parameters(decrypted)
+        if parameters['SUCCESS']:
+            parameters.pop('SUCCESS')
+            return parameters
+        return parameters['REASON'].decode()
+
+    def mail_manager(self,
+                     identifier: str,
+                     password: str,
+                     message: str) -> bool:
+        logger.info("STARTED mail manager")
+        raw = identifier + ':' + password
+        token = hashlib.sha256(raw.encode()).hexdigest()
+        msg = create_message(b"USER", b"MAILMANAGER", {
+            b"AUTH_TOKEN": token.encode(),
+            b"IDENTIFIER": identifier.encode(),
+            b"MESSAGE": message.encode()
+        })
+        encrypted = rsa.encrypt(msg, self._server_public_key) + MESSAGE_END
+        with socket.create_connection((self._ip, self._port)) as sock:
+            logger.info(msg)
+            sock.send(encrypted)
+            data = sock.recv(1024)
+            while not data.endswith(MESSAGE_END):
+                data += sock.recv(1024)
+
+            data = data[:-len(MESSAGE_END)]
+            try:
+                decrypted = rsa.decrypt(data, self._private_key)
+                logger.info(decrypted)
+            except rsa.pkcs1.DecryptionError:
+                logger.error("WTF")
+
+        parameters = extract_parameters(decrypted)
+        if parameters['SUCCESS']:
+            return True
+        else:
+            logger.error(parameters['REASON'])
             return False
 
 
-moshe = Client('127.0.0.1', 1337, b"USER")
-moshe.login('210040010',
-             'Matan02',)
+
+
+

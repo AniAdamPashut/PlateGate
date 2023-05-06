@@ -1,5 +1,5 @@
 from dotenv import dotenv_values
-from source.Recongnize import Recognizer
+from source.Recognize import Recognizer
 import cv2
 
 

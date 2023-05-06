@@ -1,6 +1,8 @@
 import logging
 import os
+import random
 import socket
+import string
 import sys
 import threading
 import hashlib
@@ -34,9 +36,11 @@ def protocol(name):
 
 RSA_PUBLIC_KEY = 'rsa_public_key'
 RSA_PRIVATE_KEY = 'rsa_private_key'
+AUTHORIZATION_CODE = 'authorization_code'
 SEED = 'seed'
 SEP = b'8===D<'
 MESSAGE_END = b"###"
+AUTHORIZATION_TOKEN = 'auth_token'
 
 
 def extract_parameters(data: bytes) -> dict[str, bytes]:
@@ -55,6 +59,10 @@ def create_message(sender: bytes, method: bytes, parameters: dict):
         message += key + SEP + parameters[key] + b"~~~"
     message += MESSAGE_END
     return message
+
+
+def generate_random_string(length: int):
+    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
 
 
 class Server:
@@ -143,10 +151,20 @@ class Server:
         hashed_passowrd = hashlib.sha256((password + salt).encode()).hexdigest()
         db_hashed_password = db.get_hashed_password('users', identifier)
         succeed = hashed_passowrd == db_hashed_password
-        msg = create_message(b"SRVR", b"LOGIN", {
-            b"SUCCESS": succeed.to_bytes(succeed.bit_length(), 'big')
-        })
-        print("LOGIN succeed?", succeed)
+        if succeed:
+            raw_token = identifier + ':' + password
+            token = hashlib.sha256(raw_token.encode()).hexdigest()
+            self._clients[client_id][AUTHORIZATION_TOKEN] = token
+            code = generate_random_string(128)
+            msg = create_message(b"SRVR", b"LOGIN", {
+                b"SUCCESS": succeed.to_bytes(succeed.bit_length(), 'big'),
+                b"AUTHORIZATION_CODE": code.encode()
+            })
+            self._clients[client_id][AUTHORIZATION_CODE] = code
+        else:
+            msg = create_message(b"SRVR", b"LOGIN", {
+                b"SUCCESS": succeed.to_bytes(succeed.bit_length(), 'big')
+            })
         encrypted = rsa.encrypt(msg, clients_public_key) + MESSAGE_END
         client.send(encrypted)
 
@@ -174,14 +192,18 @@ class Server:
                           company_id=company_id,
                           email=email,
                           user_state=1):
-            print('inserted')
+            raw_token = identifier + ':' + password
+            token = hashlib.sha256(raw_token.encode()).hexdigest()
+            self._clients[client_id][AUTHORIZATION_TOKEN] = token
+            code = generate_random_string(128)
+            self._clients[client_id][AUTHORIZATION_CODE] = code
             msg = create_message(b"SRVR", b"SIGNUP", {
-                b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
+                b"SUCCESS": True.to_bytes(True.bit_length(), 'big'),
+                b"AUTHORIZATION_CODE": code.encode()
             })
             currtime = str(datetime.datetime.utcnow())
-            self._mailer.mailto([email], "Don't reply", "You signed up successfully at " + currtime)
+            self._mailer.mailto([email], "Don't reply (PlateGate)", "You signed up successfully at " + currtime)
         else:
-            print('not inserted')
             msg = create_message(b"SRVR", b"SIGNUP", {
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big')
             })
@@ -189,6 +211,76 @@ class Server:
         print(encrypted)
         client.send(encrypted)
         print("SIGNUP END")
+
+    @protocol(b"USERINFO")
+    def _user_info(self, client_id, client, data):
+        print("USERINFO")
+        try:
+            client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
+        except KeyError as error:
+            logger.error(str(error))
+            return
+        parameters = extract_parameters(data)
+        auth_code = self._clients[client_id][AUTHORIZATION_CODE]
+        if auth_code != parameters['AUTHORIZATION_CODE'].decode():
+            msg = create_message(b"SRVR", b"USERINFO", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"UNAUTHORIZED"
+            })
+            encrypted = rsa.encrypt(msg, client_public_key)
+            client.send(encrypted)
+            print("INCORRECT AUTH CODE")
+            return
+        db = Database.PlateGateDB()
+        user = db.get_user_by_id(parameters['IDENTIFIER'].decode())
+        company_name, _ = db.get_company_by_user_id(parameters['IDENTIFIER'].decode())
+        msg = create_message(b"SRVR", b"USERINFO", {
+            b"SUCCESS": True.to_bytes(True.bit_length(), 'big'),
+            b"IDENTIFIER": str(user['id_number']).encode(),
+            b"FNAME": user['fname'].encode(),
+            b"LNAME": user['lname'].encode(),
+            b"COMPANY_NAME": company_name.encode(),
+            b"EMAIL": user['email'].encode()
+        })
+        encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+        client.send(encrypted)
+        self._clients[client_id].pop(AUTHORIZATION_CODE)
+
+    @protocol(b"MAILMANAGER")
+    def _mail_manager(self, client_id, client, data):
+        print('Mail MANAGER')
+        try:
+            client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
+            client_token = self._clients[client_id][AUTHORIZATION_TOKEN]
+        except KeyError as error:
+            logger.error(str(error))
+            return
+        parameters = extract_parameters(data)
+        token = parameters['AUTH_TOKEN'].decode()
+        if token != client_token:
+            msg = create_message(b"SRVR", b"MAILMANAGER", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"CLIENT TOKEN IS FAULTY"
+            })
+            encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+            client.send(encrypted)
+            print('Faulty Token')
+            return
+        message = parameters['MESSAGE'].decode()
+        client_id_number = parameters['IDENTIFIER']
+        db = Database.PlateGateDB()
+        _, client_company_id = db.get_company_by_user_id(client_id_number.decode())
+        print(client_company_id)
+        client_manager = db.get_manager_by_company_id(client_company_id)
+        manager_email = db.get_email('users', client_manager)
+        self._mailer.mailto([manager_email], f'Message from {client_id_number.decode()} (PlateGate)', message)
+        msg = create_message(b"SRVR", b"MAILMANAGER", {
+            b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
+        })
+        encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+        client.send(encrypted)
+
+
 
     def _handle_client(self, client, addr):
         client_id = hashlib.sha256(str(addr[0]).encode()).hexdigest()
@@ -223,13 +315,24 @@ class Server:
         function = decrypted.split(b"~~~")[0].split(b" ")[1]
         print(function)
         if function not in self.KNOWN_REQUESTS.keys():
+            print('closing client')
             client.close()
             self._client_count -= 1
             return
 
         self.KNOWN_REQUESTS[function](client_id, client, decrypted)
         client.close()
-        del self._clients[client_id]
+        try:
+            auth_code = self._clients[client_id][AUTHORIZATION_CODE]
+        except KeyError:
+            self._clients[client_id] = {
+                AUTHORIZATION_TOKEN: self._clients[client_id][AUTHORIZATION_TOKEN]
+            }
+        else:
+            self._clients[client_id] = {
+                AUTHORIZATION_TOKEN: self._clients[client_id][AUTHORIZATION_TOKEN],
+                AUTHORIZATION_CODE: auth_code
+            }
         self._client_count -= 1
 
     def mainloop(self):

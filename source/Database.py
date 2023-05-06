@@ -1,7 +1,10 @@
 import random
+from typing import Tuple, Any
+
 import mysql.connector
 import string
 import hashlib
+import validator
 
 
 class PlateGateDB:
@@ -46,24 +49,36 @@ class PlateGateDB:
         self._close()
         return val['password']
 
+    def get_user_by_id(self, id_number: str) -> dict[str, str]:
+        self._open()
+        self._cur.execute(f"SELECT * FROM users WHERE id_number='{id_number}'")
+        val = self._cur.fetchone()
+        self._close()
+        return val
+
+    def get_manager_by_company_id(self, company_id):
+        self._open()
+        self._cur.execute(f"SELECT manager_id FROM companies WHERE company_id='{company_id}'")
+        val = self._cur.fetchone()
+        self._close()
+        return val['manager_id']
+
+    def get_company_by_user_id(self, id_number: str) -> tuple:
+        self._open()
+        self._cur.execute(f"SELECT company_id FROM users WHERE id_number='{id_number}'")
+        val = self._cur.fetchone()
+        company_id = val['company_id']
+        self._cur.execute(f"SELECT company_name FROM companies WHERE company_id='{company_id}'")
+        name = self._cur.fetchone()['company_name']
+        self._close()
+        return name, company_id
+
     def get_email(self, table_name: str, id_number: str) -> str:
         self._open()
         self._cur.execute(f"SELECT email FROM {table_name} WHERE id_number='{id_number}'")
         val = self._cur.fetchone()
         self._close()
         return val['email']
-
-    def select_all_where(self, table_name: str, **kwargs):
-        self._open()
-        query = f"SELECT * FROM {table_name} WHERE "
-        for col in kwargs.keys():
-            query += f"{col}=%s,"
-        query = query[:-1]
-        query += ';'
-        self._cur.execute(query, tuple(kwargs.values()))
-        val = self._cur.fetchall()
-        self._close()
-        return val
 
     def show_tables(self):
         self._open()
@@ -101,9 +116,9 @@ class PlateGateDB:
 
     @staticmethod
     def _validate_values(kwargs):
-        if not Validator.validate_id(kwargs['id_number']):
+        if not validator.validate_id(kwargs['id_number']):
             raise ValueError("Id is not valid")
-        if not Validator.validate_name(kwargs['fname']) or not Validator.validate_name(kwargs['lname']):
+        if not validator.validate_name(kwargs['fname']) or not validator.validate_name(kwargs['lname']):
             raise ValueError("User First or Last name are not valid")
         return kwargs
 
@@ -263,32 +278,3 @@ class PlateGateDB:
         return entry_id
 
 
-
-class Validator:
-    @staticmethod
-    def validate_id(id_number: str):
-        try:
-            int(id_number)
-        except ValueError:
-            raise ValueError("Please insert a string made up from digits")
-        if not id_number:
-            return False
-        if len(id_number) > 9:
-            return False
-        if len(id_number) < 9:
-            id_number = "00000000" + id_number
-            id_number = id_number[-9:]
-            print(id_number)
-        validator = "121212121"
-        array = []
-        for id_num, validating_num in zip(id_number, validator):
-            num = int(id_num) * int(validating_num)
-            if num > 10:
-                num = num % 10 + num // 10
-            array.append(num)
-        id_sum = sum(array)
-        return id_sum % 10 == 0
-
-    @staticmethod
-    def validate_name(name: str):
-        return name.isalpha()
