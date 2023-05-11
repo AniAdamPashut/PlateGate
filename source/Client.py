@@ -115,19 +115,10 @@ class Client:
             b"IDENTIFIER": identifier.encode(),
             b"PASSWORD": password.encode()
         })
-        with socket.create_connection((self._ip, self._port)) as sock:
-            encrypted = rsa.encrypt(msg, self._server_public_key) + MESSAGE_END
-            sock.send(encrypted)
-            data = sock.recv(1024)
-            while data[-len(MESSAGE_END):] != MESSAGE_END:
-                data += sock.recv(1024)
-            data = data[:-len(MESSAGE_END)]
-            logger.info("Data recved: " + str(data))
-            try:
-                decryted = rsa.decrypt(data, self._private_key)
-            except rsa.pkcs1.DecryptionError:
-                logging.error("How did we got here?")
-        parameters = extract_parameters(decryted)
+
+        decrypted = self._send_and_recv_msg(msg)
+
+        parameters = extract_parameters(decrypted)
         if parameters['SUCCESS']:
             print('logged in')
             return parameters['AUTHORIZATION_CODE'].decode()
@@ -149,20 +140,8 @@ class Client:
             b"COMPANY_ID": company_id.encode(),
             b"EMAIL": email.encode()
         })
-        logger.info(msg)
-        with socket.create_connection((self._ip, self._port)) as sock:
-            encrypted = rsa.encrypt(msg, self._server_public_key) + MESSAGE_END
-            print("Data sent: " + str(encrypted))
-            sock.send(encrypted)
-            data = sock.recv(1024)
-            while data[-len(MESSAGE_END):] != MESSAGE_END:
-                data += sock.recv(1024)
-            data = data[:-len(MESSAGE_END)]
-            print("Data received: " + str(data))
-            try:
-                decrypted = rsa.decrypt(data, self._private_key)
-            except rsa.pkcs1.DecryptionError:
-                logging.error("How did we got here?")
+
+        decrypted = self._send_and_recv_msg(msg)
 
         parameters = extract_parameters(decrypted)
         try:
@@ -180,25 +159,13 @@ class Client:
             b"AUTHORIZATION_CODE": auth_code.encode(),
             b"IDENTIFIER": identifier.encode()
         })
-        encrypted = rsa.encrypt(msg, self._server_public_key) + MESSAGE_END
-        with socket.create_connection((self._ip, self._port)) as sock:
-            logger.info(msg)
-            sock.send(encrypted)
-            data = sock.recv(1024)
-            while not data.endswith(MESSAGE_END):
-                data += sock.recv(1024)
-            data = data[:-len(MESSAGE_END)]
-            try:
-                decrypted = rsa.decrypt(data, self._private_key)
-                logger.info(decrypted)
-            except rsa.pkcs1.DecryptionError:
-                logger.error("How did we got here?")
+
+        decrypted = self._send_and_recv_msg(msg)
 
         parameters = extract_parameters(decrypted)
         if parameters['SUCCESS']:
-            parameters.pop('SUCCESS')
             return parameters
-        return parameters['REASON'].decode()
+        return parameters
 
     def mail_manager(self,
                      identifier: str,
@@ -212,9 +179,55 @@ class Client:
             b"IDENTIFIER": identifier.encode(),
             b"MESSAGE": message.encode()
         })
+
+        decrypted = self._send_and_recv_msg(msg)
+
+        parameters = extract_parameters(decrypted)
+        if parameters['SUCCESS']:
+            return True
+        else:
+            logger.error(parameters['REASON'])
+            return False
+
+    def delete_user(self, token, identifier):
+        logger.info("DELETE USER started")
+        msg = create_message(b"USER", b"DELETE", {
+            b"AUTH_TOKEN": token.encode(),
+            b"IDENTIFIER": identifier.encode()
+        })
+        decrypted = self._send_and_recv_msg(msg)
+
+        parameters = extract_parameters(decrypted)
+        if parameters['SUCCESS']:
+            return True
+        logger.info(parameters['REASON'])
+        return False
+
+    def update_user(self,
+                    manager_id: str,
+                    token: str,
+                    identifier: str,
+                    entries_dict: dict[str, str]):
+        msg_dict = {
+            b"AUTH_TOKEN": token.encode(),
+            b"IDENTIFIER": identifier.encode(),
+            b"MANAGER_ID": manager_id.encode()
+        }
+        for name, entry in entries_dict.items():
+            if entry:
+                msg_dict[name.upper().encode()] = entry.encode()
+
+        msg = create_message(b"USER", b"UPDATE", msg_dict)
+        decrypted = self._send_and_recv_msg(msg)
+        parameters = extract_parameters(decrypted)
+        if parameters['SUCCESS']:
+            return True
+        logger.info(parameters['REASON'])
+        return False
+
+    def _send_and_recv_msg(self, msg):
         encrypted = rsa.encrypt(msg, self._server_public_key) + MESSAGE_END
         with socket.create_connection((self._ip, self._port)) as sock:
-            logger.info(msg)
             sock.send(encrypted)
             data = sock.recv(1024)
             while not data.endswith(MESSAGE_END):
@@ -225,14 +238,10 @@ class Client:
                 decrypted = rsa.decrypt(data, self._private_key)
                 logger.info(decrypted)
             except rsa.pkcs1.DecryptionError:
-                logger.error("WTF")
+                logger.info("WHY DID WE GOT HERE")
 
-        parameters = extract_parameters(decrypted)
-        if parameters['SUCCESS']:
-            return True
-        else:
-            logger.error(parameters['REASON'])
-            return False
+        return decrypted
+
 
 
 

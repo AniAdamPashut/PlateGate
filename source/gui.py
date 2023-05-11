@@ -1,8 +1,17 @@
 import hashlib
 import tkinter
-from tkinter import messagebox
 import Client
 import validator
+from tkinter import messagebox
+
+
+def protocol(name):
+    def inner(method):
+        setattr(method, 'registered', True)
+        setattr(method, 'name', name)
+        return method
+
+    return inner
 
 
 def main():
@@ -30,10 +39,18 @@ class MainWindow(tkinter.Tk):
         self._logged = True
         client = Client.Client('127.0.0.1', 1337, b"USER")
         details = client.get_user_info(auth_code, identifier)
+        if not details['SUCCESS']:
+            messagebox.showerror('User wan\'nt logged', details['REASON'].decode())
+            return False
+        details.pop('SUCCESS')
         self._login_frame.pack_forget()
         self._signup_frame.pack_forget()
-        self._logged_in_frame = LoggedInFrame(self, details)
+        if int.from_bytes(details['STATE'], 'big') > 1:
+            self._logged_in_frame = AdminLoggedFrame(self, details)
+        else:
+            self._logged_in_frame = LoggedInFrame(self, details)
         self._logged_in_frame.pack()
+        return True
 
     def log_out_user(self):
         self._logged_in_frame.destroy()
@@ -47,6 +64,11 @@ class MainWindow(tkinter.Tk):
     @property
     def password(self):
         return self._password
+
+    @property
+    def token(self):
+        raw = self.identifier + ':' + self.password
+        return hashlib.sha256(raw.encode()).hexdigest()
 
 
 class LoggedInFrame(tkinter.Frame):
@@ -73,6 +95,64 @@ class LoggedInFrame(tkinter.Frame):
         self.mail_entry = CustomEntry(self, 'message', 2)
         self.update_button = SubmitButton(self, 'mail_manager')
         self.update_button.grid(row=4, column=0)
+
+
+class AdminLoggedFrame(tkinter.Frame):
+    def __init__(self, master, user_details: dict[str, bytes]):
+        super().__init__(master)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(2, weight=1)
+        self.header = tkinter.Label(self)
+        self.header.config(text='Details:')
+        self.header.grid(sticky='n', row=0, column=1)
+        self._labels = []
+        index = 1
+        for key in user_details:
+            lbl = tkinter.Label(self)
+            lbl['text'] = f'{key}: {user_details[key].decode()}'
+            lbl.grid(sticky='n', row=index, column=1)
+            self._labels.append(lbl)
+            index += 1
+        self.button = SubmitButton(self, 'logout')
+        self.button.grid(row=index, column=1, sticky='n')
+        self.update_label = tkinter.Label(self)
+        self.update_label['text'] = 'Want to update a worker details?\nEnter his id number:'
+        self.update_label.grid(row=0, column=0)
+        self.id_number = CustomEntry(self, 'identifier', 2)
+        self._update_button = SubmitButton(self, 'update')
+        self._update_button.grid(row=3, column=0)
+
+
+class ChangeDetailsWindow(tkinter.Toplevel):
+    details = ['fname', 'lname', 'email']
+
+    def __init__(self, identifier, manager_id, token):
+        super().__init__()
+        self.token = token
+        self._identifier = identifier
+        self.manager_id = manager_id
+        self._frame = tkinter.Frame(self)
+        self._frame.grid_columnconfigure(0, weight=1)
+        self._frame.grid_columnconfigure(2, weight=1)
+        self._label = tkinter.Label(self._frame)
+        self._label['text'] = f'Identifier: {identifier}'
+        self._label.grid(row=0, sticky='n')
+        self.delete_button = SubmitButton(self._frame, 'delete_user')
+        self.submit_button = SubmitButton(self._frame, 'commit')
+        self.detail_entries = []
+        index = 2
+        for detail in self.details:
+            entry = CustomEntry(self._frame, detail, index)
+            entry.grid(sticky='n', row=index, column=1)
+            self.detail_entries.append(entry)
+            index += 1
+        self.delete_button.grid(row=index, column=0)
+        self.submit_button.grid(row=index+1, column=0)
+        self._frame.pack()
+
+    @property
+    def identifier(self):
+        return self._identifier
 
 
 class LoginFrame(tkinter.Frame):
@@ -113,7 +193,8 @@ class CustomEntry(tkinter.Entry):
 
 
 class SubmitButton(tkinter.Button):
-    KNOWN_TYPES = ['signup', 'login', 'logout', 'mail_manager']
+    KNOWN_TYPES = ['signup', 'login', 'logout', 'mail_manager', 'update', 'commit', 'delete_user']
+    KNOWN_REQUESTS = {}
 
     def __init__(self, master, type: str):
         super().__init__(master, text=type, command=self._on_click)
@@ -122,79 +203,153 @@ class SubmitButton(tkinter.Button):
             raise ValueError("Wrong type given in class constructor")
         self._type = type
 
-    def _on_click(self):
-        entries = [entry for entry in self.master.winfo_children() if isinstance(entry, CustomEntry)]
-        entries_dict = {entry.name: entry.get() for entry in entries}
-        if self._type == 'signup':
+        for method in dir(self):
+            f = getattr(self, method)
+            if callable(f) and getattr(f, 'registered', False):
+                self.KNOWN_REQUESTS[getattr(f, 'name')] = f
+
+    @protocol('login')
+    def _login(self, entries_dict):
+        try:
             if not validator.validate_id(entries_dict['identifier']):
                 messagebox.showerror('error', 'id is incorrect')
                 return
-            if not validator.validate_name(entries_dict['fname']) and validator.validate_name(entries_dict['lname']):
+        except ValueError as error:
+            messagebox.showerror('error', str(error))
+            return
+        client = Client.Client('127.0.0.1', 1337, b"USER")
+        try:
+            logged = client.login(identifier=entries_dict['identifier'],
+                                  password=entries_dict['password'], )
+        except KeyError:
+            return
+        else:
+            if not logged:
+                messagebox.showerror('error logging in',
+                                     'something went wrong. '
+                                     'if you id is correct '
+                                     'try retyping the password')
+            else:
+                window = self.winfo_toplevel()
+                if not isinstance(window, MainWindow):
+                    return
+                success = window.log_in_user(entries_dict['identifier'], logged, entries_dict['password'])
+                if not success:
+                    return
+                messagebox.showinfo('logged-in',
+                                    'you logged in successfully. you may close this window.')
+
+    @protocol('signup')
+    def _signup(self, entries_dict):
+        try:
+            if not validator.validate_id(entries_dict['identifier']):
+                messagebox.showerror('error', 'id is incorrect')
+                return
+            if not (validator.validate_name(entries_dict['fname']) and validator.validate_name(entries_dict['lname'])):
                 messagebox.showerror('error', 'first or last names are illegal')
                 return
             if not validator.validate_email(entries_dict['email']):
                 messagebox.showerror('error', 'email is illegal')
                 return
-            client = Client.Client('127.0.0.1', 1337, b"USER")
-            try:
-                signed = client.signup(identifier=entries_dict['identifier'],
-                                       fname=entries_dict['fname'],
-                                       lname=entries_dict['lname'],
-                                       password=entries_dict['password'],
-                                       company_id=entries_dict['company_id'],
-                                       email=entries_dict['email'])
-            except KeyError:
-                return
+        except ValueError as error:
+            messagebox.showerror('error', str(error))
+            return
+        client = Client.Client('127.0.0.1', 1337, b"USER")
+        try:
+            signed = client.signup(identifier=entries_dict['identifier'],
+                                   fname=entries_dict['fname'],
+                                   lname=entries_dict['lname'],
+                                   password=entries_dict['password'],
+                                   company_id=entries_dict['company_id'],
+                                   email=entries_dict['email'])
+        except KeyError:
+            return
+        else:
+            if not signed:
+                messagebox.showerror('error signing up',
+                                     'something went wrong. '
+                                     'try again later or validate your data with your manager.')
             else:
-                if not signed:
-                    messagebox.showerror('error signing up',
-                                         'something went wrong. '
-                                         'try again later or validate your data with your manager.')
-                else:
-                    window: MainWindow = self.winfo_toplevel()
-                    messagebox.showinfo('signed-up',
-                                        'you signed up successfully. you may close this window.')
-                    window.log_in_user(entries_dict['identifier'], signed, entries_dict['password'])
+                window: MainWindow = self.winfo_toplevel()
+                messagebox.showinfo('signed-up',
+                                    'you signed up successfully. you may close this window.')
+                window.log_in_user(entries_dict['identifier'], signed, entries_dict['password'])
 
-        elif self._type == 'login':
-            if not validator.validate_id(entries_dict['identifier']):
-                messagebox.showerror('error', 'id is incorrect')
-                return
-            client = Client.Client('127.0.0.1', 1337, b"USER")
-            try:
-                logged = client.login(identifier=entries_dict['identifier'],
-                                      password=entries_dict['password'],)
-            except KeyError:
-                return
-            else:
-                if not logged:
-                    messagebox.showerror('error logging in',
-                                         'something went wrong. '
-                                         'if you id is correct '
-                                         'try retyping the password')
-                else:
-                    window = self.winfo_toplevel()
-                    window.log_in_user(entries_dict['identifier'], logged, entries_dict['password'])
-                    messagebox.showinfo('logged-in',
-                                        'you logged in successfully. you may close this window.')
-        elif self._type == 'logout':
-            window = self.winfo_toplevel()
-            window.log_out_user()
-        elif self._type == 'mail_manager':
-            client = Client.Client('127.0.0.1', 1337, b"USER")
-            window = self.winfo_toplevel()
-            try:
-                result = client.mail_manager(window.identifier, window.password, entries_dict['message'])
-            except KeyError:
-                return
-            else:
-                if result:
-                    messagebox.showinfo('Message Sent!', 'The message has been sent to your manager')
-                else:
-                    messagebox.showerror('Message was not sent', '')
+    @protocol('logout')
+    def _logout(self, *_):
+        window = self.winfo_toplevel()
+        window.log_out_user()
 
-        for entry in entries:
-            entry.delete(0, tkinter.END)
+    @protocol('mail_manager')
+    def _mail_manager(self, entries_dict):
+        client = Client.Client('127.0.0.1', 1337, b"USER")
+        window = self.winfo_toplevel()
+        if not isinstance(window, MainWindow):
+            return
+        try:
+            result = client.mail_manager(window.identifier, window.password, entries_dict['message'])
+        except KeyError:
+            return
+        else:
+            if result:
+                messagebox.showinfo('Message Sent!', 'The message has been sent to your manager')
+            else:
+                messagebox.showerror('Message was not sent', '')
+
+    @protocol('update')
+    def _show_update(self, entries_dict):
+        window = self.winfo_toplevel()
+        if not isinstance(window, MainWindow):
+            return
+        tpl = ChangeDetailsWindow(entries_dict['identifier'], window.identifier, window.token)
+        tpl.mainloop()
+
+    @protocol('delete_user')
+    def _delete_user(self, *_):
+        tpl = self.winfo_toplevel()
+        if not isinstance(tpl, ChangeDetailsWindow):
+            return
+        identifier = tpl.identifier
+        client = Client.Client('127.0.0.1', 1337, b"USER")
+        token = tpl.token
+        success = client.delete_user(token, identifier)
+        if success:
+            messagebox.showinfo('Deleted!',
+                                f'You deleted client {identifier}')
+        else:
+            messagebox.showerror('Client wasn\'t deleted', '')
+        tpl.destroy()
+
+    @protocol('commit')
+    def _commit_to_db(self, entries_dict):
+        print('committing')
+        tpl = self.winfo_toplevel()
+        if not isinstance(tpl, ChangeDetailsWindow):
+            return
+        identifier = tpl.identifier
+        client = Client.Client('127.0.0.1', 1337, b"USER")
+        token = tpl.token
+        success = client.update_user(tpl.manager_id, token, identifier, entries_dict)
+        if success:
+            messagebox.showinfo('Changes Committed!',
+                                f'You changed client {identifier}')
+        else:
+            messagebox.showerror('Changes were\'t committed', '')
+        tpl.destroy()
+
+    def _on_click(self):
+        entries = [entry for entry in self.master.winfo_children() if isinstance(entry, CustomEntry)]
+        entries_dict = {entry.name: entry.get() for entry in entries}
+        window = self.winfo_toplevel()
+        print(self._type)
+        if not (isinstance(window, MainWindow) or isinstance(window, ChangeDetailsWindow)):
+            return
+        print('starting function')
+        if self._type == 'update':
+            entries_dict['manager_id'] = window.identifier
+            entries_dict['token'] = window.token
+
+        self.KNOWN_REQUESTS[self._type](entries_dict)
 
 
 if __name__ == '__main__':

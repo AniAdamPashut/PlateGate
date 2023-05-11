@@ -1,5 +1,4 @@
 import random
-from typing import Tuple, Any
 
 import mysql.connector
 import string
@@ -134,10 +133,10 @@ class PlateGateDB:
 
     def _generate_company_id(self):
         company_id = random.randint(100_000, 1_000_000)
-        is_exists = self.select_all_where('companies', company_id=company_id)
+        is_exists = self.get_company_by_id(company_id)
         while is_exists:
             company_id = random.randint(100_000, 1_000_000)
-            is_exists = self.select_all_where('companies', company_id=company_id)
+            is_exists = self.get_company_by_id(company_id)
         return company_id
 
     def _configure_users_parameters(self, kwargs):
@@ -160,7 +159,7 @@ class PlateGateDB:
             kwargs['plate_number']
         except KeyError:
             raise KeyError("You must insert the owner's id number and the plate number")
-        user = self.select_all_where('users', id_number=kwargs['owner_id'])
+        user = self.get_user_by_id(kwargs['owner_id'])
         if not user:
             raise ValueError("User id_number doesn't exist, Please add the user first")
         return kwargs
@@ -271,10 +270,30 @@ class PlateGateDB:
 
     def _generate_entry_id(self):
         entry_id = random.randint(1_000_000, 10_000_000)
-        is_exists = self.select_all_where('entries', entry_id=entry_id)
+        is_exists = self.get_entry_by_id(entry_id)
         while is_exists:
             entry_id = random.randint(1_000_000, 10_000_000)
-            is_exists = self.select_all_where('entries', entry_id=entry_id)
+            is_exists = self.get_entry_by_id(entry_id)
         return entry_id
 
+    def get_vehicle_by_plate_number(self, plate_number):
+        self._open()
+        self._cur.execute(f"SELECT * FROM vehicles WHERE plate_number='{plate_number}'")
+        val = self._cur.fetchone()
+        self._close()
+        return val
+
+    def get_company_by_id(self, company_id):
+        self._open()
+        self._cur.execute(f"SELECT * FROM companies WHERE company_id='{company_id}'")
+        val = self._cur.fetchone()
+        self._close()
+        return val
+
+    def get_entry_by_id(self, entry_id):
+        self._open()
+        self._cur.execute(f"SELECT * FROM entries WHERE entry_id='{entry_id}'")
+        val = self._cur.fetchone()
+        self._close()
+        return val
 

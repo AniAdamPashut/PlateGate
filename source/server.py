@@ -40,7 +40,7 @@ AUTHORIZATION_CODE = 'authorization_code'
 SEED = 'seed'
 SEP = b'8===D<'
 MESSAGE_END = b"###"
-AUTHORIZATION_TOKEN = 'auth_token'
+AUTHENTICATION_TOKEN = 'authentication_token'
 
 
 def extract_parameters(data: bytes) -> dict[str, bytes]:
@@ -110,10 +110,10 @@ class Server:
     def _do_xor(self, client_id, client, data):
         print("XOR")
         logger.debug(self._clients[client_id][SEED])
-        pubkey, privkey = rsa.newkeys(2048)
-        self._clients[client_id][RSA_PRIVATE_KEY] = privkey
         xorer = XORer(self._clients[client_id][SEED])
         decrypted = xorer.do_xor(data)
+        pubkey, privkey = rsa.newkeys(2048)
+        self._clients[client_id][RSA_PRIVATE_KEY] = privkey
         print(decrypted)
         request_parameters = extract_parameters(decrypted)
         n = int.from_bytes(request_parameters['NVALUE'], 'big')
@@ -154,7 +154,7 @@ class Server:
         if succeed:
             raw_token = identifier + ':' + password
             token = hashlib.sha256(raw_token.encode()).hexdigest()
-            self._clients[client_id][AUTHORIZATION_TOKEN] = token
+            self._clients[client_id][AUTHENTICATION_TOKEN] = token
             code = generate_random_string(128)
             msg = create_message(b"SRVR", b"LOGIN", {
                 b"SUCCESS": succeed.to_bytes(succeed.bit_length(), 'big'),
@@ -194,7 +194,7 @@ class Server:
                           user_state=1):
             raw_token = identifier + ':' + password
             token = hashlib.sha256(raw_token.encode()).hexdigest()
-            self._clients[client_id][AUTHORIZATION_TOKEN] = token
+            self._clients[client_id][AUTHENTICATION_TOKEN] = token
             code = generate_random_string(128)
             self._clients[client_id][AUTHORIZATION_CODE] = code
             msg = create_message(b"SRVR", b"SIGNUP", {
@@ -234,14 +234,21 @@ class Server:
         db = Database.PlateGateDB()
         user = db.get_user_by_id(parameters['IDENTIFIER'].decode())
         company_name, _ = db.get_company_by_user_id(parameters['IDENTIFIER'].decode())
-        msg = create_message(b"SRVR", b"USERINFO", {
-            b"SUCCESS": True.to_bytes(True.bit_length(), 'big'),
-            b"IDENTIFIER": str(user['id_number']).encode(),
-            b"FNAME": user['fname'].encode(),
-            b"LNAME": user['lname'].encode(),
-            b"COMPANY_NAME": company_name.encode(),
-            b"EMAIL": user['email'].encode()
-        })
+        if user['user_state'] < 0:
+            msg = create_message(b"SRVR", b"USERINFO", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"USER IS DELETED"
+            })
+        else:
+            msg = create_message(b"SRVR", b"USERINFO", {
+                b"SUCCESS": True.to_bytes(True.bit_length(), 'big'),
+                b"IDENTIFIER": str(user['id_number']).encode(),
+                b"FNAME": user['fname'].encode(),
+                b"LNAME": user['lname'].encode(),
+                b"COMPANY_NAME": company_name.encode(),
+                b"EMAIL": user['email'].encode(),
+                b"STATE": user['user_state'].to_bytes(user['user_state'].bit_length(), 'big')
+            })
         encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
         client.send(encrypted)
         self._clients[client_id].pop(AUTHORIZATION_CODE)
@@ -251,7 +258,7 @@ class Server:
         print('Mail MANAGER')
         try:
             client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
-            client_token = self._clients[client_id][AUTHORIZATION_TOKEN]
+            client_token = self._clients[client_id][AUTHENTICATION_TOKEN]
         except KeyError as error:
             logger.error(str(error))
             return
@@ -280,6 +287,109 @@ class Server:
         encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
         client.send(encrypted)
 
+    @protocol(b"DELETE")
+    def _delete_user(self, client_id, client, data):
+        print("DELETE UsER STARTED")
+        try:
+            client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
+            client_token = self._clients[client_id][AUTHENTICATION_TOKEN]
+        except KeyError as error:
+            logger.error(str(error))
+            return
+        parameters = extract_parameters(data)
+        token = parameters['AUTH_TOKEN'].decode()
+        if token != client_token:
+            msg = create_message(b"SRVR", b"DELETE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"CLIENT TOKEN IS FAULTY"
+            })
+            encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+            client.send(encrypted)
+            print('Faulty Token')
+            return
+
+        db = Database.PlateGateDB()
+        identifier = parameters['IDENTIFIER'].decode()
+        user = db.get_user_by_id(identifier)
+        manager_id = db.get_manager_by_company_id(user['company_id'])
+        print(manager_id)
+
+        if str(manager_id) != parameters['MANAGER_ID'].decode():
+            msg = create_message(b"SRVR", b"UPDATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"CLIENT IS NOT IN YOUR COMPANY"
+            })
+            encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+            client.send(encrypted)
+            print('Client not in company')
+            return
+        success = db.delete_user(identifier)
+        if success:
+            msg = create_message(b"SRVR", b"DELETE", {
+                b"SUCCESS": success.to_bytes(success.bit_length(), 'big')
+            })
+        else:
+            msg = create_message(b"SRVR", b"DELETE", {
+                b"SUCCESS": success.to_bytes(success.bit_length(), 'big'),
+                b"REASON": b"Couldn't delete client"
+            })
+        encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+        client.send(encrypted)
+
+    @protocol(b'UPDATE')
+    def _update_user(self, client_id, client, data):
+        print("UPDATE UsER STARTED")
+        try:
+            client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
+            client_token = self._clients[client_id][AUTHENTICATION_TOKEN]
+        except KeyError as error:
+            logger.error(str(error))
+            return
+        parameters = extract_parameters(data)
+        print(parameters)
+        token = parameters['AUTH_TOKEN'].decode()
+        if token != client_token:
+            msg = create_message(b"SRVR", b"UPDATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"CLIENT TOKEN IS FAULTY"
+            })
+            encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+            client.send(encrypted)
+            print('Faulty Token')
+            return
+
+        db = Database.PlateGateDB()
+        identifier = parameters['IDENTIFIER'].decode()
+        user = db.get_user_by_id(identifier)
+        manager_id = db.get_manager_by_company_id(user['company_id'])
+        print(manager_id)
+
+        if str(manager_id) != parameters['MANAGER_ID'].decode():
+            msg = create_message(b"SRVR", b"UPDATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"CLIENT IS NOT IN YOUR COMPANY"
+            })
+            encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+            client.send(encrypted)
+            print('Client not in company')
+            return
+        success = db.update('users',
+                            id_number=identifier,
+                            fname=parameters.get('FNAME', user['fname']),
+                            lname=parameters.get('LNAME', user['lname']),
+                            email=parameters.get('EMAIL', user['email']),
+                            )
+        if success:
+            msg = create_message(b"SRVR", b"UPDATE", {
+                b"SUCCESS": success.to_bytes(success.bit_length(), 'big')
+            })
+        else:
+            msg = create_message(b"SRVR", b"UPDATE", {
+                b"SUCCESS": success.to_bytes(success.bit_length(), 'big'),
+                b"REASON": b"Couldn't commit changes"
+            })
+        encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+        client.send(encrypted)
 
 
     def _handle_client(self, client, addr):
@@ -326,11 +436,11 @@ class Server:
             auth_code = self._clients[client_id][AUTHORIZATION_CODE]
         except KeyError:
             self._clients[client_id] = {
-                AUTHORIZATION_TOKEN: self._clients[client_id][AUTHORIZATION_TOKEN]
+                AUTHENTICATION_TOKEN: self._clients[client_id][AUTHENTICATION_TOKEN]
             }
         else:
             self._clients[client_id] = {
-                AUTHORIZATION_TOKEN: self._clients[client_id][AUTHORIZATION_TOKEN],
+                AUTHENTICATION_TOKEN: self._clients[client_id][AUTHENTICATION_TOKEN],
                 AUTHORIZATION_CODE: auth_code
             }
         self._client_count -= 1

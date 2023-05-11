@@ -3,7 +3,7 @@ import json
 import source.SugDelek as sd
 import source.SugRechev as sc
 from source.Database import PlateGateDB
-from source.Database import Validator
+import validator
 
 
 class GovApiFetcher:
@@ -105,10 +105,9 @@ class Vehicle:
         if self.totaled or not self.active:
             return False
         db = PlateGateDB()
-        row = db.select_all_where('vehicles', plate_number=self.plate_number)
+        row = db.get_vehicle_by_plate_number(self.plate_number)
         if not row:
             return False
-        row = row[0]
         return all([row['vehicle_state'] >= 1,
                     row['sug_rechev'] == self.sug_rechev.value[0],
                     row['sug_delek'] == self.sug_delek.value[0],
@@ -118,7 +117,7 @@ class Vehicle:
         state = 1
         if self.totaled or not self.active:
             state = 0
-        if not Validator.validate_id(owner_id):
+        if not validator.validate_id(owner_id):
             raise ValueError("The owner_id is not a valid id")
         db = PlateGateDB()
         return db.insert_into('vehicles',
