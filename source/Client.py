@@ -109,6 +109,11 @@ class Client:
         finally:
             logger.info("Xor Ended")
 
+
+class User(Client):
+    def __init__(self, ip: str, port: int):
+        super().__init__(ip, port, b"USER")
+
     def login(self, identifier: str, password: str) -> str:
         logger.info("LOGIN STARTED")
         msg = create_message(self.type, b"LOGIN", {
@@ -241,8 +246,6 @@ class Client:
                 logger.info("WHY DID WE GOT HERE")
 
         return decrypted
-
-
 
 
 

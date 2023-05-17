@@ -5,6 +5,9 @@ import validator
 from tkinter import messagebox
 
 
+client = Client.User('127.0.0.1', 1337)
+
+
 def protocol(name):
     def inner(method):
         setattr(method, 'registered', True)
@@ -37,14 +40,13 @@ class MainWindow(tkinter.Tk):
         self._password = password
         self._identifier = identifier
         self._logged = True
-        client = Client.Client('127.0.0.1', 1337, b"USER")
         details = client.get_user_info(auth_code, identifier)
         if not details['SUCCESS']:
             messagebox.showerror('User wan\'nt logged', details['REASON'].decode())
             return False
         details.pop('SUCCESS')
-        self._login_frame.pack_forget()
-        self._signup_frame.pack_forget()
+        self._login_frame.destroy()
+        self._signup_frame.destroy()
         if int.from_bytes(details['STATE'], 'big') > 1:
             self._logged_in_frame = AdminLoggedFrame(self, details)
         else:
@@ -54,6 +56,8 @@ class MainWindow(tkinter.Tk):
 
     def log_out_user(self):
         self._logged_in_frame.destroy()
+        self._login_frame = LoginFrame(self)
+        self._signup_frame = SignUpFrame(self)
         self._login_frame.pack(side='left', padx=70, pady=20)
         self._signup_frame.pack(side='right', padx=70, pady=20)
 
@@ -108,6 +112,8 @@ class AdminLoggedFrame(tkinter.Frame):
         self._labels = []
         index = 1
         for key in user_details:
+            if key == 'STATE':
+                continue
             lbl = tkinter.Label(self)
             lbl['text'] = f'{key}: {user_details[key].decode()}'
             lbl.grid(sticky='n', row=index, column=1)
@@ -217,7 +223,6 @@ class SubmitButton(tkinter.Button):
         except ValueError as error:
             messagebox.showerror('error', str(error))
             return
-        client = Client.Client('127.0.0.1', 1337, b"USER")
         try:
             logged = client.login(identifier=entries_dict['identifier'],
                                   password=entries_dict['password'], )
@@ -254,7 +259,6 @@ class SubmitButton(tkinter.Button):
         except ValueError as error:
             messagebox.showerror('error', str(error))
             return
-        client = Client.Client('127.0.0.1', 1337, b"USER")
         try:
             signed = client.signup(identifier=entries_dict['identifier'],
                                    fname=entries_dict['fname'],
@@ -282,7 +286,6 @@ class SubmitButton(tkinter.Button):
 
     @protocol('mail_manager')
     def _mail_manager(self, entries_dict):
-        client = Client.Client('127.0.0.1', 1337, b"USER")
         window = self.winfo_toplevel()
         if not isinstance(window, MainWindow):
             return
@@ -310,7 +313,6 @@ class SubmitButton(tkinter.Button):
         if not isinstance(tpl, ChangeDetailsWindow):
             return
         identifier = tpl.identifier
-        client = Client.Client('127.0.0.1', 1337, b"USER")
         token = tpl.token
         success = client.delete_user(token, identifier)
         if success:
@@ -327,7 +329,6 @@ class SubmitButton(tkinter.Button):
         if not isinstance(tpl, ChangeDetailsWindow):
             return
         identifier = tpl.identifier
-        client = Client.Client('127.0.0.1', 1337, b"USER")
         token = tpl.token
         success = client.update_user(tpl.manager_id, token, identifier, entries_dict)
         if success:

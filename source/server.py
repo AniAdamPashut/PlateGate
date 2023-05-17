@@ -119,6 +119,7 @@ class Server:
         n = int.from_bytes(request_parameters['NVALUE'], 'big')
         e = int.from_bytes(request_parameters['EVALUE'], 'big')
         client_public_key = rsa.PublicKey(n, e)
+        print(request_parameters)
         try:
             rsa.verify(request_parameters['MESSAGE'], request_parameters['SIGNATURE'], client_public_key)
         except rsa.pkcs1.VerificationError:
@@ -221,7 +222,7 @@ class Server:
             logger.error(str(error))
             return
         parameters = extract_parameters(data)
-        auth_code = self._clients[client_id][AUTHORIZATION_CODE]
+        auth_code = self._clients[client_id].pop(AUTHORIZATION_CODE)
         if auth_code != parameters['AUTHORIZATION_CODE'].decode():
             msg = create_message(b"SRVR", b"USERINFO", {
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
@@ -432,17 +433,6 @@ class Server:
 
         self.KNOWN_REQUESTS[function](client_id, client, decrypted)
         client.close()
-        try:
-            auth_code = self._clients[client_id][AUTHORIZATION_CODE]
-        except KeyError:
-            self._clients[client_id] = {
-                AUTHENTICATION_TOKEN: self._clients[client_id][AUTHENTICATION_TOKEN]
-            }
-        else:
-            self._clients[client_id] = {
-                AUTHENTICATION_TOKEN: self._clients[client_id][AUTHENTICATION_TOKEN],
-                AUTHORIZATION_CODE: auth_code
-            }
         self._client_count -= 1
 
     def mainloop(self):
