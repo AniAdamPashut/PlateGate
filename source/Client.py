@@ -273,3 +273,21 @@ class User(Client):
         logger.info(parameters['REASON'])
         return False
 
+    def add_plate(self,
+                  manager_id,
+                  plate_number,
+                  user_id):
+        msg = create_message(self.type, b"ADDPLATE", {
+            b"MANAGER_ID": manager_id.encode(),
+            b"PLATE_NUMBER": plate_number.encode(),
+            b"USER_ID": user_id.encode()
+        })
+        decrypted = self._send_and_recv_msg(msg, b"ADDPLATE")
+        parameters = extract_parameters(decrypted)
+        if parameters['SUCCESS']:
+            return True
+        else:
+            return parameters['REASON']
+
+
+

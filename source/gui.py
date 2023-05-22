@@ -30,6 +30,7 @@ class MainWindow(tkinter.Tk):
         self._logged = False
         self._identifier = None
         self._password = None
+        self._add_plate_frame = None
         self._login_frame = LoginFrame(self)
         self._login_frame.pack(side='left', padx=70, pady=20)
         self._signup_frame = SignUpFrame(self)
@@ -52,11 +53,13 @@ class MainWindow(tkinter.Tk):
             self._add_plate_frame = AddPlate(self, identifier, self.token)
         else:
             self._logged_in_frame = LoggedInFrame(self, details)
-        self._logged_in_frame.pack()
+        self._logged_in_frame.pack(side='left')
+        self._add_plate_frame.pack(side='right')
         return True
 
     def log_out_user(self):
         self._logged_in_frame.destroy()
+        self._add_plate_frame.destroy()
         self._login_frame = LoginFrame(self)
         self._signup_frame = SignUpFrame(self)
         self._login_frame.pack(side='left', padx=70, pady=20)
@@ -163,7 +166,7 @@ class AddPlate(tkinter.Frame):
         super().__init__(master, relief='solid', borderwidth=2)
         self.label = tkinter.Label(self, text='Add a license plate')
         self.label.grid(row=0)
-        self.identifer = CustomEntry(self, 'identifier', 2)
+        self.identifer = CustomEntry(self, 'worker_id', 2)
         self.plate_number = CustomEntry(self, 'plate_number', 4)
         self.button = SubmitButton(self, 'add plate')
         self.button.grid(row=5)
@@ -209,7 +212,7 @@ class CustomEntry(tkinter.Entry):
 
 
 class SubmitButton(tkinter.Button):
-    KNOWN_TYPES = ['signup', 'login', 'logout', 'mail_manager', 'update', 'commit', 'delete_user']
+    KNOWN_TYPES = ['signup', 'login', 'logout', 'mail_manager', 'update', 'commit', 'delete_user', 'add plate']
     KNOWN_REQUESTS = {}
 
     def __init__(self, master, type: str):
@@ -292,7 +295,7 @@ class SubmitButton(tkinter.Button):
     @protocol('logout')
     def _logout(self, *_):
         window = self.winfo_toplevel()
-        if not (isinstance(window, MainWindow) and isinstance(window, MainWindow)):
+        if not isinstance(window, MainWindow):
             return
         window.log_out_user()
 
@@ -350,6 +353,22 @@ class SubmitButton(tkinter.Button):
             messagebox.showerror('Changes were\'t committed', '')
         tpl.destroy()
 
+    @protocol('add plate')
+    def _add_plate(self, entries_dict):
+        tpl = self.winfo_toplevel()
+        if not isinstance(tpl, MainWindow):
+            return
+        manager_id = tpl.identifier
+        plate_number = entries_dict['plate_number']
+        user_id = entries_dict['worker_id']
+        resposne = client.add_plate(manager_id,
+                                    plate_number,
+                                    user_id)
+        if resposne == True:
+            messagebox.showinfo('plate added', 'Plate number added successfully')
+        else:
+            messagebox.showerror('plate not added', resposne)
+
     def _on_click(self):
         entries = [entry for entry in self.master.winfo_children() if isinstance(entry, CustomEntry)]
         entries_dict = {entry.name: entry.get() for entry in entries}
@@ -363,9 +382,6 @@ class SubmitButton(tkinter.Button):
             entries_dict['token'] = window.token
 
         self.KNOWN_REQUESTS[self._type](entries_dict)
-
-        for entry in entries:
-            entry.delete(0, tkinter.END)
 
 
 if __name__ == '__main__':

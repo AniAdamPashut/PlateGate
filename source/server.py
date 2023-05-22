@@ -491,6 +491,71 @@ class Server:
         else:
             print('entry not inserted')
 
+    @protocol(b"ADDPLATE")
+    def _add_plate(self, client_id, client, data):
+        try:
+            client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
+        except KeyError:
+            return
+        parameters = extract_parameters(data)
+        manager_id = parameters['MANAGER_ID'].decode()
+        user_id = parameters['USER_ID'].decode()
+        plate_number = parameters['PLATE_NUMBER'].decode()
+        db = Database.PlateGateDB()
+        user_company = db.get_company_by_user_id(user_id)
+        manager_company = db.get_company_by_user_id(manager_id)
+        if manager_company != user_company:
+            message = create_message(b"SRVR", b"ADDPLATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"CLIENT NOT IN COMPANY"
+            })
+            encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
+            client.send(encrypted)
+            return
+        manager_state = int(db.get_user_by_id(manager_id)['user_state'])
+        if manager_state < 2:
+            message = create_message(b"SRVR", b"ADDPLATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"YOURE NOT A MANAGER"
+            })
+            encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
+            client.send(encrypted)
+            return
+        vehicle = fetch.GovApiFetcher.get_vehicle_by_plate_number(plate_number)
+        if not vehicle:
+            message = create_message(b"SRVR", b"ADDPLATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"VEHICLE DOTN EXIST"
+            })
+            encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
+            client.send(encrypted)
+            return
+        if vehicle.totaled or not vehicle.active:
+            message = create_message(b"SRVR", b"ADDPLATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"VEHICLE IS NOT ACTIVE OR TOTAL LOSS"
+            })
+            encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
+            client.send(encrypted)
+            return
+        inserted = vehicle.add_to_database(user_id)
+        if not inserted:
+            message = create_message(b"SRVR", b"ADDPLATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"Couldnt enter vehicle to db"
+            })
+            encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
+            client.send(encrypted)
+            return
+        print('WE MADE IT')
+        message = create_message(b"SRVR", b"ADDPLATE", {
+            b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
+        })
+        encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
+        client.send(encrypted)
+        return
+
+
     @staticmethod
     def _prepare_message(message: bytes, method: bytes, client_public_key) -> bytes:
         """
