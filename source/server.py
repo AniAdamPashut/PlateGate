@@ -3,6 +3,7 @@ import os
 import random
 import socket
 import string
+import fetch
 import sys
 import threading
 import hashlib
@@ -10,9 +11,13 @@ import rsa
 import Database
 import Mailing
 import dotenv
+import time
 import datetime
+import Recognize
 from XORer import XORer
 from diffiehellman import DiffieHellman
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
 
 CONFIG = dotenv.dotenv_values('.env')
 
@@ -38,9 +43,12 @@ RSA_PUBLIC_KEY = 'rsa_public_key'
 RSA_PRIVATE_KEY = 'rsa_private_key'
 AUTHORIZATION_CODE = 'authorization_code'
 SEED = 'seed'
+AUTHENTICATION_TOKEN = 'authentication_token'
+
+
 SEP = b'8===D<'
 MESSAGE_END = b"###"
-AUTHENTICATION_TOKEN = 'authentication_token'
+MESSAGE_HALF = b"!==!"
 
 
 def extract_parameters(data: bytes) -> dict[str, bytes]:
@@ -112,7 +120,7 @@ class Server:
         logger.debug(self._clients[client_id][SEED])
         xorer = XORer(self._clients[client_id][SEED])
         decrypted = xorer.do_xor(data)
-        pubkey, privkey = rsa.newkeys(2048)
+        pubkey, privkey = rsa.newkeys(1024)
         self._clients[client_id][RSA_PRIVATE_KEY] = privkey
         print(decrypted)
         request_parameters = extract_parameters(decrypted)
@@ -124,7 +132,7 @@ class Server:
             rsa.verify(request_parameters['MESSAGE'], request_parameters['SIGNATURE'], client_public_key)
         except rsa.pkcs1.VerificationError:
             logger.error("Very bad")
-        rand_message = os.urandom(128)
+        rand_message = os.urandom(16)
         signature = rsa.sign(rand_message, privkey, 'SHA-256')
         msg = create_message(b"SRVR", b"XOR", {
             b"NVALUE": pubkey.n.to_bytes((pubkey.n.bit_length() + 7) // 8, 'big'),
@@ -166,7 +174,7 @@ class Server:
             msg = create_message(b"SRVR", b"LOGIN", {
                 b"SUCCESS": succeed.to_bytes(succeed.bit_length(), 'big')
             })
-        encrypted = rsa.encrypt(msg, clients_public_key) + MESSAGE_END
+        encrypted = self._prepare_message(msg, b"LOGIN", clients_public_key)
         client.send(encrypted)
 
     @protocol(b"SIGNUP")
@@ -208,9 +216,15 @@ class Server:
             msg = create_message(b"SRVR", b"SIGNUP", {
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big')
             })
-        encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+        encrypted = self._prepare_message(msg, b"SIGNUP", client_public_key)
         print(encrypted)
         client.send(encrypted)
+        manager_mail = db.get_manager_email_by_company_id(company_id)
+        self._mailer.mailto([manager_mail],
+                            "New User Signed Into you company",
+                            f"A user with the id of {identifier} signed up with your company id.\n"
+                            f"you can always remove him from the desktop app"
+                            )
         print("SIGNUP END")
 
     @protocol(b"USERINFO")
@@ -228,7 +242,7 @@ class Server:
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
                 b"REASON": b"UNAUTHORIZED"
             })
-            encrypted = rsa.encrypt(msg, client_public_key)
+            encrypted = self._prepare_message(msg, b"UPDATE", client_public_key)
             client.send(encrypted)
             print("INCORRECT AUTH CODE")
             return
@@ -250,7 +264,7 @@ class Server:
                 b"EMAIL": user['email'].encode(),
                 b"STATE": user['user_state'].to_bytes(user['user_state'].bit_length(), 'big')
             })
-        encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+        encrypted = self._prepare_message(msg, b"USERINFO", client_public_key)
         client.send(encrypted)
         self._clients[client_id].pop(AUTHORIZATION_CODE)
 
@@ -270,7 +284,7 @@ class Server:
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
                 b"REASON": b"CLIENT TOKEN IS FAULTY"
             })
-            encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+            encrypted = self._prepare_message(msg, b"UPDATE", client_public_key)
             client.send(encrypted)
             print('Faulty Token')
             return
@@ -285,7 +299,7 @@ class Server:
         msg = create_message(b"SRVR", b"MAILMANAGER", {
             b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
         })
-        encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+        encrypted = self._prepare_message(msg, b"MAILMANAGER", client_public_key)
         client.send(encrypted)
 
     @protocol(b"DELETE")
@@ -304,7 +318,7 @@ class Server:
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
                 b"REASON": b"CLIENT TOKEN IS FAULTY"
             })
-            encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+            encrypted = self._prepare_message(msg, b"UPDATE", client_public_key)
             client.send(encrypted)
             print('Faulty Token')
             return
@@ -320,7 +334,7 @@ class Server:
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
                 b"REASON": b"CLIENT IS NOT IN YOUR COMPANY"
             })
-            encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+            encrypted = self._prepare_message(msg, b"DELETE", client_public_key)
             client.send(encrypted)
             print('Client not in company')
             return
@@ -334,7 +348,7 @@ class Server:
                 b"SUCCESS": success.to_bytes(success.bit_length(), 'big'),
                 b"REASON": b"Couldn't delete client"
             })
-        encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+        encrypted = self._prepare_message(msg, b"DELETE", client_public_key)
         client.send(encrypted)
 
     @protocol(b'UPDATE')
@@ -354,7 +368,7 @@ class Server:
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
                 b"REASON": b"CLIENT TOKEN IS FAULTY"
             })
-            encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+            encrypted = self._prepare_message(msg, b"UPDATE", client_public_key)
             client.send(encrypted)
             print('Faulty Token')
             return
@@ -370,7 +384,7 @@ class Server:
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
                 b"REASON": b"CLIENT IS NOT IN YOUR COMPANY"
             })
-            encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+            encrypted = self._prepare_message(msg, b"UPDATE", client_public_key)
             client.send(encrypted)
             print('Client not in company')
             return
@@ -389,14 +403,122 @@ class Server:
                 b"SUCCESS": success.to_bytes(success.bit_length(), 'big'),
                 b"REASON": b"Couldn't commit changes"
             })
-        encrypted = rsa.encrypt(msg, client_public_key) + MESSAGE_END
+        encrypted = self._prepare_message(msg, b"UPDATE", client_public_key)
         client.send(encrypted)
 
+    @protocol(b"RECOGNIZE")
+    def _recognize(self, client_id, client, data):
+        try:
+            client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
+        except KeyError as error:
+            logger.error(str(error))
+            return
+
+        filename = 'david.jpg'
+        parameters = extract_parameters(data)
+        image_bytes = parameters['IMAGE']
+        with open(filename, 'wb') as f:
+            f.write(image_bytes)
+        license_plate = Recognize.recognize_from_image(filename)
+        if not license_plate:
+            message = create_message(b"SRVR", b"RECOGNIZE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"bad image, could not recognize"
+            })
+            encrypted = self._prepare_message(message, b"RECOGNIZE", client_public_key)
+            client.send(encrypted)
+            logger.info("couldnt recognize image")
+            return
+        db = Database.PlateGateDB()
+        vehicle_db = db.get_vehicle_by_plate_number(license_plate)
+        if not vehicle_db:
+            message = create_message(b"SRVR", b"RECOGNIZE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"vehicle not in database"
+            })
+            encrypted = self._prepare_message(message, b"RECOGNIZE", client_public_key)
+            client.send(encrypted)
+            logger.info("couldnt recognize image")
+            return
+        owner_id = vehicle_db['owner_id']
+        name, company_id = db.get_company_by_user_id(owner_id)
+        if int.from_bytes(parameters['COMPANY_ID'], 'big') != company_id:
+            message = create_message(b"SRVR", b"RECOGNIZE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"car not in company"
+            })
+            encrypted = self._prepare_message(message, b"RECOGNIZE", client_public_key)
+            client.send(encrypted)
+            logger.info("couldnt recognize image")
+            return
+        vehicle_gov = fetch.GovApiFetcher.get_vehicle_by_plate_number(license_plate)
+        validation_list = [
+            vehicle_gov.plate_number == vehicle_db['plate_number'],
+            vehicle_gov.shnat_yitsur == vehicle_db['shnat_yitsur'],
+            vehicle_gov.sug_delek.value == vehicle_db['sug_delek'],
+            vehicle_gov.sug_rechev.value == vehicle_db['sug_rechev'],
+            vehicle_db['vehicle_state'] > 0,
+            vehicle_gov.active,
+            not vehicle_gov.totaled
+        ]
+        is_valid = all(validation_list)
+        if not is_valid:
+            print('vehicle not valid')
+            message = create_message(b"SRVR", b"RECOGNIZE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": f'{validation_list}'.encode()
+            })
+            encrypted = self._prepare_message(message, b"RECOGNIZE", client_public_key)
+            client.send(encrypted)
+            logger.info('vehicle not valid')
+            return
+        message = create_message(b"SRVR", b"RECOGNIZE", {
+            b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
+        })
+        encrypted = self._prepare_message(message, b"RECOGNIZE", client_public_key)
+        client.send(encrypted)
+        if sys.platform.startswith('linux'):
+            time_now = time.clock_gettime(time.CLOCK_REALTIME)
+        else: time_now = time.time()
+        inserted = db.insert_into('entries',
+                                  time_now=time_now,
+                                  time_readable=datetime.datetime.now().isoformat(),
+                                  person_id=vehicle_db['owner_id'],
+                                  car_id=vehicle_db['plate_number'],
+                                  company_id=company_id)
+        if inserted:
+            print('entry inserted')
+        else:
+            print('entry not inserted')
+
+    @staticmethod
+    def _prepare_message(message: bytes, method: bytes, client_public_key) -> bytes:
+        """
+        :param message: response from the server
+        :param method: method of the response
+        :param client_public_key: the public RSA key of the client
+        :return: a fully prepared message to send back to the client
+        """
+
+        padder = padding.PKCS7(128).padder()
+        padded_msg = padder.update(message) + padder.finalize()
+
+        aes_key = os.urandom(32)
+        iv = os.urandom(16)
+        aes_info = create_message(b"SRVR", method, {
+            b"AES_KEY": aes_key,
+            b"IVECTOR": iv
+        })
+        encrypted_info = rsa.encrypt(aes_info, client_public_key)
+        aes = Cipher(algorithms.AES(aes_key), mode=modes.CBC(iv))
+        encryptor = aes.encryptor()
+        encrypted_message = encryptor.update(padded_msg) + encryptor.finalize()
+        return encrypted_info + MESSAGE_HALF + encrypted_message + MESSAGE_END
 
     def _handle_client(self, client, addr):
         client_id = hashlib.sha256(str(addr[0]).encode()).hexdigest()
         if client_id not in self._clients.keys():
-            self._clients[client_id] = {}
+                self._clients[client_id] = {}
         data = client.recv(1024)
         while not data[-len(MESSAGE_END):] == MESSAGE_END:
             data += client.recv(1024)
@@ -404,28 +526,37 @@ class Server:
         data = data[:-len(MESSAGE_END)]
 
         decrypted = None
-
-        try:
-            decrypted = rsa.decrypt(data, self._clients[client_id][RSA_PRIVATE_KEY])
-            print(decrypted)
-        except KeyError:
+        if MESSAGE_HALF in data:
+            info, content = data.split(MESSAGE_HALF)
+        else:
             if SEED not in self._clients[client_id]:
                 self._do_diffie(client_id, client, data)
             else:
                 self._do_xor(client_id, client, data)
             return
-        except rsa.pkcs1.DecryptionError as error:
-            decrypted = data
-            raise
 
-        if not decrypted[:4] in self.KNOWN_CLIENTS:
+        decrypted_info = rsa.decrypt(info, self._clients[client_id][RSA_PRIVATE_KEY])
+        parameters = extract_parameters(decrypted_info)
+
+        aes_key = parameters['AES_KEY']
+        iv = parameters['IVECTOR']
+
+        aes = Cipher(algorithms.AES(aes_key), mode=modes.CBC(iv))
+        decryptor = aes.decryptor()
+        unpadder = padding.PKCS7(128).unpadder()
+
+        decrypted = decryptor.update(content) + decryptor.finalize()
+        decrypted = unpadder.update(decrypted) + unpadder.finalize()
+
+        if not decrypted_info[:4] in self.KNOWN_CLIENTS:
             client.close()
             self._client_count -= 1
             return
 
-        function = decrypted.split(b"~~~")[0].split(b" ")[1]
+        function = decrypted_info.split(b"~~~")[0].split(b" ")[1]
         print(function)
-        if function not in self.KNOWN_REQUESTS.keys():
+        if function not in self.KNOWN_REQUESTS:
+            print('function not exists')
             print('closing client')
             client.close()
             self._client_count -= 1

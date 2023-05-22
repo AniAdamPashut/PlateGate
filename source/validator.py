@@ -2,27 +2,30 @@ import re
 
 
 def validate_id(id_number: str):
+    bikoret = id_number[-1]
+    id_number = id_number[:-1]
     try:
         int(id_number)
     except ValueError:
         raise ValueError("Please insert a string made up from digits")
     if not id_number:
         return False
-    if len(id_number) > 9:
+    if len(id_number) > 8:
         return False
-    if len(id_number) < 9:
+    if len(id_number) < 8:
         id_number = "00000000" + id_number
-        id_number = id_number[-9:]
+        id_number = id_number[-8:]
         print(id_number)
-    validator = "121212121"
+    validator = "12121212"
     array = []
     for id_num, validating_num in zip(id_number, validator):
         num = int(id_num) * int(validating_num)
-        if num > 10:
+        if num > 9:
             num = num % 10 + num // 10
         array.append(num)
     id_sum = sum(array)
-    return id_sum % 10 == 0
+    bikoret_validate = (10 - id_sum % 10) % 10
+    return bikoret_validate == int(bikoret)
 
 
 def validate_name(name: str):

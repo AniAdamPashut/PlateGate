@@ -1,5 +1,4 @@
 import random
-
 import mysql.connector
 import string
 import hashlib
@@ -62,6 +61,13 @@ class PlateGateDB:
         self._close()
         return val['manager_id']
 
+    def get_manager_email_by_company_id(self, company_id):
+        self._open()
+        self._cur.execute(f"SELECT * FROM companies WHERE company_id='{company_id}'")
+        val = self._cur.fetchone()
+        self._close()
+        return val['email']
+
     def get_company_by_user_id(self, id_number: str) -> tuple:
         self._open()
         self._cur.execute(f"SELECT company_id FROM users WHERE id_number='{id_number}'")
@@ -78,20 +84,6 @@ class PlateGateDB:
         val = self._cur.fetchone()
         self._close()
         return val['email']
-
-    def show_tables(self):
-        self._open()
-        self._cur.execute("SHOW TABLES;")
-        val = self._cur.fetchall()
-        self._close()
-        return val
-
-    def show_databases(self):
-        self._open()
-        self._cur.execute("SHOW DATABASES;")
-        val = self._cur.fetchall()
-        self._close()
-        return val
 
     @staticmethod
     def _generate_salt():
@@ -178,21 +170,21 @@ class PlateGateDB:
             return kwargs
 
     def _insert_kwargs(self, table_name, kwargs):
-        query = f"INSERT INTO {table_name} ("
-        for col in kwargs.keys():
-            query += f"{col},"
-        query = query[:-1]
-        query += ") VALUES ("
-        for _ in kwargs.values():
-            query += "%s,"
-        query = query[:-1]
-        query += ");"
+        columns = ','.join(f"{col}" for col in kwargs)
+        values = ','.join(f"%s" for _ in kwargs)
+        query = f"INSERT INTO {table_name} (" \
+                f"{columns}" \
+                f") VALUES (" \
+                f"{values}" \
+                f");"
         self._open()
         inserted = False
+        print(query)
         try:
             self._cur.execute(query, tuple(kwargs.values()))
             self._conn.commit()
         except Exception as err:
+            print(str(err))
             raise err
         else:
             print("Insert was committed successfully")
@@ -260,6 +252,7 @@ class PlateGateDB:
         try:
             kwargs['car_id']
             kwargs['person_id']
+            kwargs['company_id']
         except KeyError:
             raise KeyError("Please insert both person id and or car plate number")
         else:

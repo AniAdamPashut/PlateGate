@@ -49,6 +49,7 @@ class MainWindow(tkinter.Tk):
         self._signup_frame.destroy()
         if int.from_bytes(details['STATE'], 'big') > 1:
             self._logged_in_frame = AdminLoggedFrame(self, details)
+            self._add_plate_frame = AddPlate(self, identifier, self.token)
         else:
             self._logged_in_frame = LoggedInFrame(self, details)
         self._logged_in_frame.pack()
@@ -66,12 +67,8 @@ class MainWindow(tkinter.Tk):
         return self._identifier
 
     @property
-    def password(self):
-        return self._password
-
-    @property
     def token(self):
-        raw = self.identifier + ':' + self.password
+        raw = self.identifier + ':' + self._password
         return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -159,6 +156,19 @@ class ChangeDetailsWindow(tkinter.Toplevel):
     @property
     def identifier(self):
         return self._identifier
+
+
+class AddPlate(tkinter.Frame):
+    def __init__(self, master, identifer, token):
+        super().__init__(master, relief='solid', borderwidth=2)
+        self.label = tkinter.Label(self, text='Add a license plate')
+        self.label.grid(row=0)
+        self.identifer = CustomEntry(self, 'identifier', 2)
+        self.plate_number = CustomEntry(self, 'plate_number', 4)
+        self.button = SubmitButton(self, 'add plate')
+        self.button.grid(row=5)
+        self.master_id = identifer
+        self.token = token
 
 
 class LoginFrame(tkinter.Frame):
@@ -282,6 +292,8 @@ class SubmitButton(tkinter.Button):
     @protocol('logout')
     def _logout(self, *_):
         window = self.winfo_toplevel()
+        if not (isinstance(window, MainWindow) and isinstance(window, MainWindow)):
+            return
         window.log_out_user()
 
     @protocol('mail_manager')
@@ -351,6 +363,9 @@ class SubmitButton(tkinter.Button):
             entries_dict['token'] = window.token
 
         self.KNOWN_REQUESTS[self._type](entries_dict)
+
+        for entry in entries:
+            entry.delete(0, tkinter.END)
 
 
 if __name__ == '__main__':

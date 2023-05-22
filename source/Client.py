@@ -5,11 +5,13 @@ import rsa
 import logging
 from XORer import XORer
 from diffiehellman import DiffieHellman
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
 
 
 SEP = b"8===D<"
 MESSAGE_END = b"###"
-
+MESSAGE_HALF = b"!==!"
 
 logging.basicConfig(filename='clientlog.log',
                     format='%(message)s',
@@ -74,9 +76,9 @@ class Client:
 
     def _do_xor(self):
         logger.info("Xor started")
-        pubkey, privkey = rsa.newkeys(2048)
+        pubkey, privkey = rsa.newkeys(1024)
         self._private_key = privkey
-        rand_message = os.urandom(128)
+        rand_message = os.urandom(16)
         signature = rsa.sign(rand_message, privkey, 'SHA-256')
         msg = create_message(self.type, b"XOR", {
             b"NVALUE": pubkey.n.to_bytes((pubkey.n.bit_length() + 7) // 8, 'big'),
@@ -109,6 +111,47 @@ class Client:
         finally:
             logger.info("Xor Ended")
 
+    def _send_and_recv_msg(self, msg, method):
+        aes_key = os.urandom(32)
+        iv = os.urandom(16)
+        aes_object = Cipher(algorithms.AES(aes_key), mode=modes.CBC(iv))
+        aes_info = create_message(self.type, method, {
+            b"AES_KEY": aes_key,
+            b"IVECTOR": iv
+        })
+        encrypted_info = rsa.encrypt(aes_info, self._server_public_key)
+        encryptor = aes_object.encryptor()
+        padder = padding.PKCS7(128).padder()
+        padded_msg = padder.update(msg) + padder.finalize()
+        enrypted_data = encryptor.update(padded_msg) + encryptor.finalize()
+        encrypted = encrypted_info + MESSAGE_HALF + enrypted_data + MESSAGE_END
+        print(encrypted)
+        with socket.create_connection((self._ip, self._port)) as sock:
+            sock.send(encrypted)
+            data = sock.recv(1024)
+            while not data.endswith(MESSAGE_END):
+                data += sock.recv(1024)
+
+            data = data[:-len(MESSAGE_END)]
+
+            if MESSAGE_HALF in data:
+                info, content = data.split(MESSAGE_HALF)
+            else:
+                return data
+
+        decrypted_info = rsa.decrypt(info, self._private_key)
+        parameters = extract_parameters(decrypted_info)
+
+        aes_key = parameters['AES_KEY']
+        iv = parameters['IVECTOR']
+        unpadder = padding.PKCS7(128).unpadder()
+        aes = Cipher(algorithms.AES(aes_key), mode=modes.CBC(iv))
+        decryptor = aes.decryptor()
+        decrypted = decryptor.update(content) + decryptor.finalize()
+        decrypted = unpadder.update(decrypted) + unpadder.finalize()
+
+        return decrypted
+
 
 class User(Client):
     def __init__(self, ip: str, port: int):
@@ -121,7 +164,7 @@ class User(Client):
             b"PASSWORD": password.encode()
         })
 
-        decrypted = self._send_and_recv_msg(msg)
+        decrypted = self._send_and_recv_msg(msg, b"LOGIN")
 
         parameters = extract_parameters(decrypted)
         if parameters['SUCCESS']:
@@ -146,7 +189,7 @@ class User(Client):
             b"EMAIL": email.encode()
         })
 
-        decrypted = self._send_and_recv_msg(msg)
+        decrypted = self._send_and_recv_msg(msg, b'SIGNUP')
 
         parameters = extract_parameters(decrypted)
         try:
@@ -165,7 +208,7 @@ class User(Client):
             b"IDENTIFIER": identifier.encode()
         })
 
-        decrypted = self._send_and_recv_msg(msg)
+        decrypted = self._send_and_recv_msg(msg, b"USERINFO")
 
         parameters = extract_parameters(decrypted)
         if parameters['SUCCESS']:
@@ -185,7 +228,7 @@ class User(Client):
             b"MESSAGE": message.encode()
         })
 
-        decrypted = self._send_and_recv_msg(msg)
+        decrypted = self._send_and_recv_msg(msg, b"MAILMANAGER")
 
         parameters = extract_parameters(decrypted)
         if parameters['SUCCESS']:
@@ -200,7 +243,7 @@ class User(Client):
             b"AUTH_TOKEN": token.encode(),
             b"IDENTIFIER": identifier.encode()
         })
-        decrypted = self._send_and_recv_msg(msg)
+        decrypted = self._send_and_recv_msg(msg, b"DELETE")
 
         parameters = extract_parameters(decrypted)
         if parameters['SUCCESS']:
@@ -223,30 +266,10 @@ class User(Client):
                 msg_dict[name.upper().encode()] = entry.encode()
 
         msg = create_message(b"USER", b"UPDATE", msg_dict)
-        decrypted = self._send_and_recv_msg(msg)
+        decrypted = self._send_and_recv_msg(msg, b"UPDATE")
         parameters = extract_parameters(decrypted)
         if parameters['SUCCESS']:
             return True
         logger.info(parameters['REASON'])
         return False
-
-    def _send_and_recv_msg(self, msg):
-        encrypted = rsa.encrypt(msg, self._server_public_key) + MESSAGE_END
-        with socket.create_connection((self._ip, self._port)) as sock:
-            sock.send(encrypted)
-            data = sock.recv(1024)
-            while not data.endswith(MESSAGE_END):
-                data += sock.recv(1024)
-
-            data = data[:-len(MESSAGE_END)]
-            try:
-                decrypted = rsa.decrypt(data, self._private_key)
-                logger.info(decrypted)
-            except rsa.pkcs1.DecryptionError:
-                logger.info("WHY DID WE GOT HERE")
-
-        return decrypted
-
-
-
 
