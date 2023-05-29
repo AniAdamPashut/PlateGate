@@ -7,6 +7,7 @@ import validator
 
 class PlateGateDB:
     def __init__(self):
+        self._conn = None
         self._cur = None
         self._hostname = 'localhost'
         self._username = 'root'
@@ -33,9 +34,9 @@ class PlateGateDB:
         self._close()
         return val
 
-    def select_salt(self, table_name: str, id_number: str):
+    def select_salt(self, id_number: str):
         self._open()
-        self._cur.execute(f"SELECT salt FROM {table_name} WHERE id_number='{id_number}';")
+        self._cur.execute(f"SELECT salt FROM users WHERE id_number='{id_number}';")
         val = self._cur.fetchone()
         self._close()
         return val['salt']
@@ -61,12 +62,19 @@ class PlateGateDB:
         self._close()
         return val['manager_id']
 
+    def get_company_by_manager_id(self, manager_id):
+        self._open()
+        self._cur.execute(f"SELECT company_id FROM companies WHERE manager_id={manager_id}")
+        val = self._cur.fetchone()
+        self._close()
+        return val['company_id']
+
     def get_manager_email_by_company_id(self, company_id):
         self._open()
         self._cur.execute(f"SELECT * FROM companies WHERE company_id='{company_id}'")
         val = self._cur.fetchone()
         self._close()
-        return val['email']
+        return self.get_email(val['manager_id'])
 
     def get_company_by_user_id(self, id_number: str) -> tuple:
         self._open()
@@ -114,7 +122,9 @@ class PlateGateDB:
         return kwargs
 
     @staticmethod
-    def _figure_user_state(kwargs):
+    def _figure_user_state(kwargs: dict):
+        if kwargs.get('user_state', 0) > 1:
+            return kwargs
         try:
             kwargs['company_id']
         except KeyError:
@@ -223,7 +233,7 @@ class PlateGateDB:
         value = kwargs.pop(key)
         query = f"UPDATE {table_name} SET "
         if 'password' in kwargs.keys():
-            salt = self.select_salt(table_name, key)
+            salt = self.select_salt(key)
             hashed = hashlib.sha256((kwargs['password'] + salt).encode()).hexdigest()
             kwargs['password'] = hashed
         for col in kwargs.keys():

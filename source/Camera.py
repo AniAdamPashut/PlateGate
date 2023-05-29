@@ -26,6 +26,7 @@ class Camera(Client.Client):
         return False
 
 
-cmra = Camera('127.0.0.1', 1337, 900164)
-print(cmra.recognize(cv2.imread('pego.jpg')))
+if __name__ == '__main__':
+    cmra = Camera('127.0.0.1', 1337, 900164)
+    print(cmra.recognize(cv2.imread('pego.jpg')))
 

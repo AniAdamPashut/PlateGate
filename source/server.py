@@ -14,8 +14,6 @@ import dotenv
 import time
 import datetime
 import Recognize
-from XORer import XORer
-from diffiehellman import DiffieHellman
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 
@@ -42,7 +40,6 @@ def protocol(name):
 RSA_PUBLIC_KEY = 'rsa_public_key'
 RSA_PRIVATE_KEY = 'rsa_private_key'
 AUTHORIZATION_CODE = 'authorization_code'
-SEED = 'seed'
 AUTHENTICATION_TOKEN = 'authentication_token'
 
 
@@ -98,32 +95,12 @@ class Server:
             if callable(f) and getattr(f, 'registered', False):
                 self.KNOWN_REQUESTS[getattr(f, 'name')] = f
 
-    @protocol(b"DIFFIE")
-    def _do_diffie(self, client_id, client, data):
-        print("Diffie-Hellman")
-        dh = DiffieHellman(group=2)
-        public_key = dh.get_public_key()
-
-        request_parameters = extract_parameters(data)
-
-        msg = create_message(b"SRVR", b"DIFFIE", {
-            b"PUBLIC": public_key
-        })
-        client.send(msg)
-        seed = dh.generate_shared_key(request_parameters['PUBLIC'])
-        print(seed)
-        self._clients[client_id][SEED] = seed
-
     @protocol(b"XOR")
     def _do_xor(self, client_id, client, data):
         print("XOR")
-        logger.debug(self._clients[client_id][SEED])
-        xorer = XORer(self._clients[client_id][SEED])
-        decrypted = xorer.do_xor(data)
         pubkey, privkey = rsa.newkeys(1024)
         self._clients[client_id][RSA_PRIVATE_KEY] = privkey
-        print(decrypted)
-        request_parameters = extract_parameters(decrypted)
+        request_parameters = extract_parameters(data)
         n = int.from_bytes(request_parameters['NVALUE'], 'big')
         e = int.from_bytes(request_parameters['EVALUE'], 'big')
         client_public_key = rsa.PublicKey(n, e)
@@ -140,8 +117,7 @@ class Server:
             b"MESSAGE": rand_message,
             b"SIGNATURE": signature
         })
-        encrypted_message = xorer.do_xor(msg) + MESSAGE_END
-        client.send(encrypted_message)
+        client.send(msg)
         self._clients[client_id][RSA_PUBLIC_KEY] = client_public_key
 
     @protocol(b"LOGIN")
@@ -156,7 +132,7 @@ class Server:
         db = Database.PlateGateDB()
         identifier = parameters['IDENTIFIER'].decode()
         password = parameters['PASSWORD'].decode()
-        salt = db.select_salt('users', identifier)
+        salt = db.select_salt(identifier)
         hashed_passowrd = hashlib.sha256((password + salt).encode()).hexdigest()
         db_hashed_password = db.get_hashed_password('users', identifier)
         succeed = hashed_passowrd == db_hashed_password
@@ -249,7 +225,7 @@ class Server:
         db = Database.PlateGateDB()
         user = db.get_user_by_id(parameters['IDENTIFIER'].decode())
         company_name, _ = db.get_company_by_user_id(parameters['IDENTIFIER'].decode())
-        if user['user_state'] < 0:
+        if int(user['user_state']) < 0:
             msg = create_message(b"SRVR", b"USERINFO", {
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
                 b"REASON": b"USER IS DELETED"
@@ -555,6 +531,62 @@ class Server:
         client.send(encrypted)
         return
 
+    @protocol(b'ADDCOMPANY')
+    def _add_company(self, client_id, client, data):
+        try:
+            client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
+        except KeyError:
+            return
+        parameters = extract_parameters(data)
+        db = Database.PlateGateDB()
+
+        inserted_user = db.insert_into('users',
+                                       id_number=parameters['IDENTIFIER'].decode(),
+                                       fname=parameters['FNAME'].decode(),
+                                       lname=parameters['LNAME'].decode(),
+                                       password=parameters['PASSWORD'].decode(),
+                                       email=parameters['EMAIL'].decode(),
+                                       user_state=2)
+
+        if not inserted_user:
+            msg = create_message(b"SRVR", b"ADDCOMPANY", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"Couldn't insert client"
+            })
+            encrypted = self._prepare_message(msg, b"ADDCOMPANY", client_public_key)
+            client.send(encrypted)
+            return
+        inserted_company = db.insert_into('companies',
+                                          company_name=parameters['COMPANY_NAME'].decode(),
+                                          manager_id=parameters['IDENTIFIER'].decode())
+        if not inserted_company:
+            msg = create_message(b"SRVR", b"ADDCOMPANY", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"Couldn't insert comppany"
+            })
+            encrypted = self._prepare_message(msg, b"ADDCOMPANY", client_public_key)
+            client.send(encrypted)
+            return
+        company_id = db.get_company_by_manager_id(parameters['IDENTIFIER'].decode())
+        updated = db.update('users',
+                            id_number=parameters['IDENTIFIER'].decode(),
+                            company_id=company_id)
+        if not updated:
+            msg = create_message(b"SRVR", b"ADDCOMPANY", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"Couldn't update user"
+            })
+            encrypted = self._prepare_message(msg, b"ADDCOMPANY", client_public_key)
+            client.send(encrypted)
+            return
+
+        msg = create_message(b"SRVR", b"ADDCOMPANY", {
+            b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
+        })
+        encrypted = self._prepare_message(msg, b"ADDCOMPANY", client_public_key)
+        client.send(encrypted)
+        return
+
 
     @staticmethod
     def _prepare_message(message: bytes, method: bytes, client_public_key) -> bytes:
@@ -594,10 +626,7 @@ class Server:
         if MESSAGE_HALF in data:
             info, content = data.split(MESSAGE_HALF)
         else:
-            if SEED not in self._clients[client_id]:
-                self._do_diffie(client_id, client, data)
-            else:
-                self._do_xor(client_id, client, data)
+            self._do_xor(client_id, client, data)
             return
 
         decrypted_info = rsa.decrypt(info, self._clients[client_id][RSA_PRIVATE_KEY])

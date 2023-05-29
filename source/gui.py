@@ -1,11 +1,11 @@
 import hashlib
 import tkinter
-import Client
+import User
 import validator
 from tkinter import messagebox
 
 
-client = Client.User('127.0.0.1', 1337)
+client = User.User('127.0.0.1', 1337)
 
 
 def protocol(name):
@@ -27,6 +27,9 @@ class MainWindow(tkinter.Tk):
         super().__init__()
         self.title(window_title)
         self.geometry("1200x600")
+        self._label = tkinter.Label(self, text='PlateGate', font=('Ariel', 30))
+        self._label.pack(anchor='n')
+        self._label.place(relx=0.5, rely=0.3, anchor=tkinter.CENTER)
         self._logged = False
         self._identifier = None
         self._password = None
@@ -36,6 +39,9 @@ class MainWindow(tkinter.Tk):
         self._signup_frame = SignUpFrame(self)
         self._signup_frame.pack(side='right', padx=70, pady=20)
         self._logged_in_frame = None
+        company_button = SubmitButton(self, 'open company')
+        company_button.place(anchor=tkinter.CENTER)
+        self._button = company_button
 
     def log_in_user(self, identifier, auth_code, password):
         self._password = password
@@ -46,15 +52,18 @@ class MainWindow(tkinter.Tk):
             messagebox.showerror('User wan\'nt logged', details['REASON'].decode())
             return False
         details.pop('SUCCESS')
+        state = details.pop('STATE')
         self._login_frame.destroy()
         self._signup_frame.destroy()
-        if int.from_bytes(details['STATE'], 'big') > 1:
+        if int.from_bytes(state, 'big') > 1:
             self._logged_in_frame = AdminLoggedFrame(self, details)
             self._add_plate_frame = AddPlate(self, identifier, self.token)
+            self._add_plate_frame.pack(side='right', padx=70, pady=20)
+            self._logged_in_frame.pack(side='left', padx=70, pady=20)
         else:
             self._logged_in_frame = LoggedInFrame(self, details)
-        self._logged_in_frame.pack(side='left')
-        self._add_plate_frame.pack(side='right')
+            self._logged_in_frame.pack(anchor='center', padx=70, pady=20)
+        self._button.pack_forget()
         return True
 
     def log_out_user(self):
@@ -64,6 +73,7 @@ class MainWindow(tkinter.Tk):
         self._signup_frame = SignUpFrame(self)
         self._login_frame.pack(side='left', padx=70, pady=20)
         self._signup_frame.pack(side='right', padx=70, pady=20)
+        self._button.pack()
 
     @property
     def identifier(self):
@@ -129,6 +139,26 @@ class AdminLoggedFrame(tkinter.Frame):
         self._update_button.grid(row=3, column=0)
 
 
+class AddCompanyWindow(tkinter.Toplevel):
+    entries = ['fname', 'lname', 'identifier', 'email', 'password', 'company_name']
+    def __init__(self):
+        super().__init__()
+        frame = tkinter.Frame(self)
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_columnconfigure(2, weight=1)
+        index = 1
+        custom_entries = []
+        for entry in self.entries:
+            cstm_entry = CustomEntry(frame, entry, index)
+            custom_entries.append(cstm_entry)
+            index += 2
+        self._frame = frame
+        self._custom_entries = custom_entries
+        self._submit = SubmitButton(self._frame, 'add company')
+        self._submit.grid(row=index)
+        self._frame.pack()
+
+
 class ChangeDetailsWindow(tkinter.Toplevel):
     details = ['fname', 'lname', 'email']
 
@@ -149,7 +179,6 @@ class ChangeDetailsWindow(tkinter.Toplevel):
         index = 2
         for detail in self.details:
             entry = CustomEntry(self._frame, detail, index)
-            entry.grid(sticky='n', row=index, column=1)
             self.detail_entries.append(entry)
             index += 1
         self.delete_button.grid(row=index, column=0)
@@ -212,7 +241,16 @@ class CustomEntry(tkinter.Entry):
 
 
 class SubmitButton(tkinter.Button):
-    KNOWN_TYPES = ['signup', 'login', 'logout', 'mail_manager', 'update', 'commit', 'delete_user', 'add plate']
+    KNOWN_TYPES = ['signup',
+                   'login',
+                   'logout',
+                   'mail_manager',
+                   'update',
+                   'commit',
+                   'delete_user',
+                   'add plate',
+                   'open company',
+                   'add company']
     KNOWN_REQUESTS = {}
 
     def __init__(self, master, type: str):
@@ -305,7 +343,7 @@ class SubmitButton(tkinter.Button):
         if not isinstance(window, MainWindow):
             return
         try:
-            result = client.mail_manager(window.identifier, window.password, entries_dict['message'])
+            result = client.mail_manager(window.identifier, window.token, entries_dict['message'])
         except KeyError:
             return
         else:
@@ -364,18 +402,41 @@ class SubmitButton(tkinter.Button):
         resposne = client.add_plate(manager_id,
                                     plate_number,
                                     user_id)
-        if resposne == True:
+        if resposne is True:
             messagebox.showinfo('plate added', 'Plate number added successfully')
         else:
             messagebox.showerror('plate not added', resposne)
+
+    @protocol('open company')
+    def _open_company_window(self, *_):
+        tpl = AddCompanyWindow()
+        tpl.mainloop()
+
+    @protocol('add company')
+    def _add_company(self, entries):
+        tpl = self.winfo_toplevel()
+        reason = client.add_company(
+            entries['company_name'],
+            entries['identifier'],
+            entries['fname'],
+            entries['lname'],
+            entries['password'],
+            entries['email']
+        )
+        if reason is not True:
+            messagebox.showerror('ERROR', reason)
+
+        else:
+            messagebox.showinfo('Success',
+                                'Company was added successfully, log in to see your manager page')
+
+        tpl.destroy()
 
     def _on_click(self):
         entries = [entry for entry in self.master.winfo_children() if isinstance(entry, CustomEntry)]
         entries_dict = {entry.name: entry.get() for entry in entries}
         window = self.winfo_toplevel()
         print(self._type)
-        if not (isinstance(window, MainWindow) or isinstance(window, ChangeDetailsWindow)):
-            return
         print('starting function')
         if self._type == 'update':
             entries_dict['manager_id'] = window.identifier
