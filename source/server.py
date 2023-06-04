@@ -14,6 +14,7 @@ import dotenv
 import time
 import datetime
 import Recognize
+import base64
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 
@@ -54,14 +55,14 @@ def extract_parameters(data: bytes) -> dict[str, bytes]:
         if SEP in parameter:
             parameter = parameter.split(SEP)
             name, value = parameter
-            request_parameters[name.decode()] = value
+            request_parameters[base64.b64decode(name).decode()] = base64.b64decode(value)
     return request_parameters
 
 
-def create_message(sender: bytes, method: bytes, parameters: dict):
+def create_message(sender: bytes, method: bytes, parameters: dict[bytes, bytes]):
     message = sender + b" " + method + b"~~~"
-    for key in parameters:
-        message += key + SEP + parameters[key] + b"~~~"
+    for key, value in parameters.items():
+        message += base64.b64encode(key) + SEP + base64.b64encode(value) + b"~~~"
     message += MESSAGE_END
     return message
 
@@ -87,6 +88,8 @@ class Server:
         self._sock = sock
         self._clients = {}
         mailer = Mailing.Mailer('smtp.gmail.com', False)
+        print(CONFIG['MAIL_ADDR'])
+        print(CONFIG['MAIL_PASS'])
         mailer.enter_credentials(CONFIG['MAIL_ADDR'], CONFIG['MAIL_PASS'])
         self._mailer = mailer
 
@@ -95,8 +98,7 @@ class Server:
             if callable(f) and getattr(f, 'registered', False):
                 self.KNOWN_REQUESTS[getattr(f, 'name')] = f
 
-    @protocol(b"XOR")
-    def _do_xor(self, client_id, client, data):
+    def _do_handshake(self, client_id, client, data):
         print("XOR")
         pubkey, privkey = rsa.newkeys(1024)
         self._clients[client_id][RSA_PRIVATE_KEY] = privkey
@@ -224,7 +226,7 @@ class Server:
             return
         db = Database.PlateGateDB()
         user = db.get_user_by_id(parameters['IDENTIFIER'].decode())
-        company_name, _ = db.get_company_by_user_id(parameters['IDENTIFIER'].decode())
+        company_name, company_id = db.get_company_by_user_id(parameters['IDENTIFIER'].decode())
         if int(user['user_state']) < 0:
             msg = create_message(b"SRVR", b"USERINFO", {
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
@@ -237,12 +239,12 @@ class Server:
                 b"FNAME": user['fname'].encode(),
                 b"LNAME": user['lname'].encode(),
                 b"COMPANY_NAME": company_name.encode(),
+                b"COMPANY_ID": str(company_id).encode(),
                 b"EMAIL": user['email'].encode(),
                 b"STATE": user['user_state'].to_bytes(user['user_state'].bit_length(), 'big')
             })
         encrypted = self._prepare_message(msg, b"USERINFO", client_public_key)
         client.send(encrypted)
-        self._clients[client_id].pop(AUTHORIZATION_CODE)
 
     @protocol(b"MAILMANAGER")
     def _mail_manager(self, client_id, client, data):
@@ -314,7 +316,7 @@ class Server:
             client.send(encrypted)
             print('Client not in company')
             return
-        success = db.delete_user(identifier)
+        success = db.remove_user(identifier)
         if success:
             msg = create_message(b"SRVR", b"DELETE", {
                 b"SUCCESS": success.to_bytes(success.bit_length(), 'big')
@@ -390,7 +392,7 @@ class Server:
             logger.error(str(error))
             return
 
-        filename = 'david.jpg'
+        filename = f'ServerImages/{client_id}.jpg'
         parameters = extract_parameters(data)
         image_bytes = parameters['IMAGE']
         with open(filename, 'wb') as f:
@@ -433,10 +435,10 @@ class Server:
             vehicle_gov.shnat_yitsur == vehicle_db['shnat_yitsur'],
             vehicle_gov.sug_delek.value == vehicle_db['sug_delek'],
             vehicle_gov.sug_rechev.value == vehicle_db['sug_rechev'],
-            vehicle_db['vehicle_state'] > 0,
+            vehicle_db['vehicle_state'] >= 0,
             vehicle_gov.active,
             not vehicle_gov.totaled
-        ]
+        ]  # Validate vehicle with data.gov.il
         is_valid = all(validation_list)
         if not is_valid:
             print('vehicle not valid')
@@ -514,8 +516,9 @@ class Server:
             encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
             client.send(encrypted)
             return
-        inserted = vehicle.add_to_database(user_id)
-        if not inserted:
+        user_state = db.get_user_by_id(user_id)['user_state']
+        updated = db.update('vehicles', plate_number=plate_number, vehicle_state=1)
+        if not updated:
             message = create_message(b"SRVR", b"ADDPLATE", {
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
                 b"REASON": b"Couldnt enter vehicle to db"
@@ -523,6 +526,17 @@ class Server:
             encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
             client.send(encrypted)
             return
+        inserted = vehicle.add_to_database(user_id)
+        if not inserted and not updated:
+            message = create_message(b"SRVR", b"ADDPLATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"Couldnt enter vehicle to db"
+            })
+            encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
+            client.send(encrypted)
+            return
+        if user_state == 0:
+            db.update('vehicles', plate_number=plate_number, vehicle_state=0)
         print('WE MADE IT')
         message = create_message(b"SRVR", b"ADDPLATE", {
             b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
@@ -530,6 +544,61 @@ class Server:
         encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
         client.send(encrypted)
         return
+
+    @protocol(b"REMOVEPLATE")
+    def _remove_plate(self, client_id, client, data):
+        try:
+            client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
+        except KeyError:
+            return
+        parameters = extract_parameters(data)
+        manager_id = parameters['MANAGER_ID'].decode()
+        user_id = parameters['USER_ID'].decode()
+        plate_number = parameters['PLATE_NUMBER'].decode()
+        db = Database.PlateGateDB()
+        user_company = db.get_company_by_user_id(user_id)
+        manager_company = db.get_company_by_user_id(manager_id)
+        if manager_company != user_company:
+            message = create_message(b"SRVR", b"REMOVEPLATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"CLIENT NOT IN COMPANY"
+            })
+            encrypted = self._prepare_message(message, b"REMOVEPLATE", client_public_key)
+            client.send(encrypted)
+            return
+        manager_state = int(db.get_user_by_id(manager_id)['user_state'])
+        if manager_state < 2:
+            message = create_message(b"SRVR", b"REMOVEPLATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"YOURE NOT A MANAGER"
+            })
+            encrypted = self._prepare_message(message, b"REMOVEPLATE", client_public_key)
+            client.send(encrypted)
+            return
+        vehicle_in_database = db.get_vehicle_by_plate_number(plate_number)
+        if vehicle_in_database['vehicle_state'] < 0:
+            message = create_message(b"SRVR", b"REMOVEPLATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"Vehicle is already deleted"
+            })
+            encrypted = self._prepare_message(message, b"REMOVEPLATE", client_public_key)
+            client.send(encrypted)
+            return
+        deleted = db.remove_plate(plate_number)
+        if not deleted:
+            message = create_message(b"SRVR", b"REMOVEPLATE", {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"Couldnt delete vehicle in db"
+            })
+            encrypted = self._prepare_message(message, b"REMOVEPLATE", client_public_key)
+            client.send(encrypted)
+            return
+        print('WE MADE IT')
+        message = create_message(b"SRVR", b"REMOVEPLATE", {
+            b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
+        })
+        encrypted = self._prepare_message(message, b"REMOVEPLATE", client_public_key)
+        client.send(encrypted)
 
     @protocol(b'ADDCOMPANY')
     def _add_company(self, client_id, client, data):
@@ -581,12 +650,12 @@ class Server:
             return
 
         msg = create_message(b"SRVR", b"ADDCOMPANY", {
-            b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
+            b"SUCCESS": True.to_bytes(True.bit_length(), 'big'),
+            b"COMPANY_ID": company_id.to_bytes(company_id.bit_length(), 'big')
         })
         encrypted = self._prepare_message(msg, b"ADDCOMPANY", client_public_key)
         client.send(encrypted)
         return
-
 
     @staticmethod
     def _prepare_message(message: bytes, method: bytes, client_public_key) -> bytes:
@@ -600,7 +669,7 @@ class Server:
         padder = padding.PKCS7(128).padder()
         padded_msg = padder.update(message) + padder.finalize()
 
-        aes_key = os.urandom(32)
+        aes_key = os.urandom(16)
         iv = os.urandom(16)
         aes_info = create_message(b"SRVR", method, {
             b"AES_KEY": aes_key,
@@ -615,18 +684,17 @@ class Server:
     def _handle_client(self, client, addr):
         client_id = hashlib.sha256(str(addr[0]).encode()).hexdigest()
         if client_id not in self._clients.keys():
-                self._clients[client_id] = {}
+            self._clients[client_id] = {}
         data = client.recv(1024)
         while not data[-len(MESSAGE_END):] == MESSAGE_END:
             data += client.recv(1024)
 
         data = data[:-len(MESSAGE_END)]
 
-        decrypted = None
         if MESSAGE_HALF in data:
             info, content = data.split(MESSAGE_HALF)
         else:
-            self._do_xor(client_id, client, data)
+            self._do_handshake(client_id, client, data)
             return
 
         decrypted_info = rsa.decrypt(info, self._clients[client_id][RSA_PRIVATE_KEY])

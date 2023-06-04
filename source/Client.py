@@ -1,6 +1,7 @@
 import os
 import socket
 import rsa
+import base64
 import logging
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
@@ -25,14 +26,14 @@ def extract_parameters(data: bytes) -> dict[str, bytes]:
         if SEP in parameter:
             parameter = parameter.split(SEP)
             name, value = parameter
-            request_parameters[name.decode()] = value
+            request_parameters[base64.b64decode(name).decode()] = base64.b64decode(value)
     return request_parameters
 
 
-def create_message(sender: bytes, method: bytes, parameters: dict) -> bytes:
+def create_message(sender: bytes, method: bytes, parameters: dict[bytes, bytes]):
     message = sender + b" " + method + b"~~~"
-    for key in parameters:
-        message += key + SEP + parameters[key] + b"~~~"
+    for key, value in parameters.items():
+        message += base64.b64encode(key) + SEP + base64.b64encode(value) + b"~~~"
     message += MESSAGE_END
     return message
 
@@ -79,7 +80,8 @@ class Client:
             logger.info("Xor Ended")
 
     def _send_and_recv_msg(self, msg, method):
-        aes_key = os.urandom(32)
+        print(msg)
+        aes_key = os.urandom(16)
         iv = os.urandom(16)
         aes_object = Cipher(algorithms.AES(aes_key), mode=modes.CBC(iv))
         aes_info = create_message(self.type, method, {
@@ -90,9 +92,8 @@ class Client:
         encryptor = aes_object.encryptor()
         padder = padding.PKCS7(128).padder()
         padded_msg = padder.update(msg) + padder.finalize()
-        enrypted_data = encryptor.update(padded_msg) + encryptor.finalize()
-        encrypted = encrypted_info + MESSAGE_HALF + enrypted_data + MESSAGE_END
-        print(encrypted)
+        encrypted_data = encryptor.update(padded_msg) + encryptor.finalize()
+        encrypted = encrypted_info + MESSAGE_HALF + encrypted_data + MESSAGE_END
         with socket.create_connection((self._ip, self._port)) as sock:
             sock.send(encrypted)
             data = sock.recv(1024)

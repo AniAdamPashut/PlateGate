@@ -39,9 +39,8 @@ class MainWindow(tkinter.Tk):
         self._signup_frame = SignUpFrame(self)
         self._signup_frame.pack(side='right', padx=70, pady=20)
         self._logged_in_frame = None
-        company_button = SubmitButton(self, 'open company')
-        company_button.place(anchor=tkinter.CENTER)
-        self._button = company_button
+        self._button = SubmitButton(self, 'open company')
+        self._button.place(relx=0.5, rely=0.5, anchor=tkinter.CENTER)
 
     def log_in_user(self, identifier, auth_code, password):
         self._password = password
@@ -55,15 +54,17 @@ class MainWindow(tkinter.Tk):
         state = details.pop('STATE')
         self._login_frame.destroy()
         self._signup_frame.destroy()
+        self._label.destroy()
         if int.from_bytes(state, 'big') > 1:
             self._logged_in_frame = AdminLoggedFrame(self, details)
             self._add_plate_frame = AddPlate(self, identifier, self.token)
             self._add_plate_frame.pack(side='right', padx=70, pady=20)
             self._logged_in_frame.pack(side='left', padx=70, pady=20)
         else:
+            details.pop('COMPANY_ID')
             self._logged_in_frame = LoggedInFrame(self, details)
             self._logged_in_frame.pack(anchor='center', padx=70, pady=20)
-        self._button.pack_forget()
+        self._button.place_forget()
         return True
 
     def log_out_user(self):
@@ -73,7 +74,8 @@ class MainWindow(tkinter.Tk):
         self._signup_frame = SignUpFrame(self)
         self._login_frame.pack(side='left', padx=70, pady=20)
         self._signup_frame.pack(side='right', padx=70, pady=20)
-        self._button.pack()
+        self._button.place(relx=0.5, rely=0.5, anchor=tkinter.CENTER)
+        self._label.pack(anchor='n')
 
     @property
     def identifier(self):
@@ -141,6 +143,7 @@ class AdminLoggedFrame(tkinter.Frame):
 
 class AddCompanyWindow(tkinter.Toplevel):
     entries = ['fname', 'lname', 'identifier', 'email', 'password', 'company_name']
+
     def __init__(self):
         super().__init__()
         frame = tkinter.Frame(self)
@@ -180,7 +183,7 @@ class ChangeDetailsWindow(tkinter.Toplevel):
         for detail in self.details:
             entry = CustomEntry(self._frame, detail, index)
             self.detail_entries.append(entry)
-            index += 1
+            index += 2
         self.delete_button.grid(row=index, column=0)
         self.submit_button.grid(row=index+1, column=0)
         self._frame.pack()
@@ -198,7 +201,9 @@ class AddPlate(tkinter.Frame):
         self.identifer = CustomEntry(self, 'worker_id', 2)
         self.plate_number = CustomEntry(self, 'plate_number', 4)
         self.button = SubmitButton(self, 'add plate')
+        self.delete_button = SubmitButton(self, 'remove plate')
         self.button.grid(row=5)
+        self.delete_button.grid(row=6)
         self.master_id = identifer
         self.token = token
 
@@ -249,16 +254,17 @@ class SubmitButton(tkinter.Button):
                    'commit',
                    'delete_user',
                    'add plate',
+                   'remove plate',
                    'open company',
                    'add company']
     KNOWN_REQUESTS = {}
 
-    def __init__(self, master, type: str):
-        super().__init__(master, text=type, command=self._on_click)
+    def __init__(self, master, button_type: str):
+        super().__init__(master, text=button_type, command=self._on_click)
         self.master = master
-        if type not in self.KNOWN_TYPES:
+        if button_type not in self.KNOWN_TYPES:
             raise ValueError("Wrong type given in class constructor")
-        self._type = type
+        self._type = button_type
 
         for method in dir(self):
             f = getattr(self, method)
@@ -306,6 +312,9 @@ class SubmitButton(tkinter.Button):
                 return
             if not validator.validate_email(entries_dict['email']):
                 messagebox.showerror('error', 'email is illegal')
+                return
+            if not validator.validate_password(entries_dict['password']):
+                messagebox.showerror('error', 'password is illegal')
                 return
         except ValueError as error:
             messagebox.showerror('error', str(error))
@@ -367,7 +376,7 @@ class SubmitButton(tkinter.Button):
             return
         identifier = tpl.identifier
         token = tpl.token
-        success = client.delete_user(token, identifier)
+        success = client.delete_user(tpl.manager_id, token, identifier)
         if success:
             messagebox.showinfo('Deleted!',
                                 f'You deleted client {identifier}')
@@ -414,6 +423,22 @@ class SubmitButton(tkinter.Button):
 
     @protocol('add company')
     def _add_company(self, entries):
+        try:
+            if not validator.validate_id(entries['identifier']):
+                messagebox.showerror('error', 'id is incorrect')
+                return
+            if not (validator.validate_name(entries['fname']) and validator.validate_name(entries['lname'])):
+                messagebox.showerror('error', 'first or last names are illegal')
+                return
+            if not validator.validate_email(entries['email']):
+                messagebox.showerror('error', 'email is illegal')
+                return
+            if not validator.validate_password(entries['password']):
+                messagebox.showerror('error', 'password is illegal')
+                return
+        except ValueError as error:
+            messagebox.showerror('error', str(error))
+            return
         tpl = self.winfo_toplevel()
         reason = client.add_company(
             entries['company_name'],
@@ -423,14 +448,31 @@ class SubmitButton(tkinter.Button):
             entries['password'],
             entries['email']
         )
-        if reason is not True:
+        if isinstance(reason, str):
             messagebox.showerror('ERROR', reason)
 
         else:
             messagebox.showinfo('Success',
-                                'Company was added successfully, log in to see your manager page')
+                                'Company was added successfully, log in to see your manager page'
+                                '\nThe Company id is ' + str(reason))
 
         tpl.destroy()
+
+    @protocol('remove plate')
+    def _remove_plate(self, entries):
+        tpl = self.winfo_toplevel()
+        if not isinstance(tpl, MainWindow):
+            return
+        manager_id = tpl.identifier
+        plate_number = entries['plate_number']
+        user_id = entries['worker_id']
+        resposne = client.remove_plate(manager_id,
+                                       plate_number,
+                                       user_id)
+        if resposne is True:
+            messagebox.showinfo('plate removed', 'Vehicle removed successfully')
+        else:
+            messagebox.showerror('plate not remove', resposne)
 
     def _on_click(self):
         entries = [entry for entry in self.master.winfo_children() if isinstance(entry, CustomEntry)]

@@ -78,20 +78,20 @@ class User(Client.Client):
         parameters = extract_parameters(decrypted)
         if parameters['SUCCESS']:
             return True
-        else:
-            return False
+        return False
 
-    def delete_user(self, token, identifier):
+    def delete_user(self, manager_id: str, token: str, identifier: str):
         msg = create_message(b"USER", b"DELETE", {
             b"AUTH_TOKEN": token.encode(),
-            b"IDENTIFIER": identifier.encode()
+            b"IDENTIFIER": identifier.encode(),
+            b"MANAGER_ID": manager_id.encode()
         })
         decrypted = self._send_and_recv_msg(msg, b"DELETE")
 
         parameters = extract_parameters(decrypted)
         if parameters['SUCCESS']:
             return True
-        return False
+        return parameters['REASON'].decode()
 
     def update_user(self,
                     manager_id: str,
@@ -130,14 +130,13 @@ class User(Client.Client):
         else:
             return parameters['REASON']
 
-
     def add_company(self,
                     company_name: str,
                     identifier: str,
                     fname: str,
                     lname: str,
                     password: str,
-                    email: str) -> bool | str:
+                    email: str) -> int | str:
         msg = create_message(self.type, b"ADDCOMPANY", {
             b"IDENTIFIER": identifier.encode(),
             b"FNAME": fname.encode(),
@@ -151,5 +150,18 @@ class User(Client.Client):
 
         parameters = extract_parameters(decrypted)
         if parameters['SUCCESS']:
-            return True
+            return int.from_bytes(parameters['COMPANY_ID'], 'big')
         return parameters['REASON'].decode()
+
+    def remove_plate(self, manager_id, plate_number, user_id):
+        msg = create_message(self.type, b"REMOVEPLATE", {
+            b"MANAGER_ID": manager_id.encode(),
+            b"PLATE_NUMBER": plate_number.encode(),
+            b"USER_ID": user_id.encode()
+        })
+        decrypted = self._send_and_recv_msg(msg, b"REMOVEPLATE")
+        parameters = extract_parameters(decrypted)
+        if parameters['SUCCESS']:
+            return True
+        else:
+            return parameters['REASON']

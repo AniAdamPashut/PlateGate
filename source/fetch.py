@@ -6,6 +6,10 @@ from source.Database import PlateGateDB
 import validator
 
 
+"""
+איתור סוג הרכב בעייתי. לכן נוצרו 4 מחלקות כלל אחת מטפלת בסוג הרכב בדרך שלה 
+"""
+
 class GovApiFetcher:
     CARS_RESOURCE_ID = '053cea08-09bc-40ec-8f7a-156f0677aff3'
     MOTORCYCLE_RESOURCE_ID = 'bf9df4e2-d90d-4c0a-a400-19e15af8e95f'

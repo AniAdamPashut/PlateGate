@@ -62,7 +62,7 @@ class PlateGateDB:
         self._close()
         return val['manager_id']
 
-    def get_company_by_manager_id(self, manager_id):
+    def get_company_by_manager_id(self, manager_id) -> int:
         self._open()
         self._cur.execute(f"SELECT company_id FROM companies WHERE manager_id={manager_id}")
         val = self._cur.fetchone()
@@ -86,9 +86,9 @@ class PlateGateDB:
         self._close()
         return name, company_id
 
-    def get_email(self, table_name: str, id_number: str) -> str:
+    def get_email(self,id_number: str) -> str:
         self._open()
-        self._cur.execute(f"SELECT email FROM {table_name} WHERE id_number='{id_number}'")
+        self._cur.execute(f"SELECT email FROM users WHERE id_number='{id_number}'")
         val = self._cur.fetchone()
         self._close()
         return val['email']
@@ -240,7 +240,7 @@ class PlateGateDB:
             query += f"{col}=%s,"
         query = query[:-1] + " "
         query += f"WHERE {key}={value};"
-        print(query)
+        print(query % tuple(kwargs.values()))
         updated = False
         try:
             self._open()
@@ -255,8 +255,12 @@ class PlateGateDB:
             self._close()
             return updated
 
-    def delete_user(self, pk_key: str):
+    def remove_user(self, pk_key: str):
         return self.update('users', id_number=pk_key, user_state=-1)
+
+    def remove_plate(self, plate_number):
+        return self.update('vehicles', plate_number=plate_number, vehicle_state=-1)
+
 
     def _extract_entries_kwargs(self, **kwargs) -> dict:
         try:

@@ -34,4 +34,9 @@ def validate_name(name: str):
 
 def validate_email(email: str):
     regex = re.compile(r'([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Z|a-z]{2,})+')
-    return re.fullmatch(regex, email)
+    return bool(re.fullmatch(regex, email))
+
+
+def validate_password(password: str) -> bool:
+    regex = re.compile(r"^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{8,}$")
+    return bool(re.fullmatch(regex, password))

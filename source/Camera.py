@@ -20,7 +20,7 @@ class Camera(Client.Client):
         response = self._send_and_recv_msg(message, b"RECOGNIZE")
         parameters = Client.extract_parameters(response)
         if parameters.get('SUCCESS', False):
-            print("open thy gate")  # this will work someday
+            print("open thy gate")
             return True
         print(parameters['REASON'])
         return False
