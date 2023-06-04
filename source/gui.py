@@ -48,7 +48,7 @@ class MainWindow(tkinter.Tk):
         self._logged = True
         details = client.get_user_info(auth_code, identifier)
         if not details['SUCCESS']:
-            messagebox.showerror('User wan\'nt logged', details['REASON'].decode())
+            messagebox.askokcancel('User wan\'nt logged', details['REASON'].decode())
             return False
         details.pop('SUCCESS')
         state = details.pop('STATE')
@@ -276,10 +276,10 @@ class SubmitButton(tkinter.Button):
     def _login(self, entries_dict):
         try:
             if not validator.validate_id(entries_dict['identifier']):
-                messagebox.showerror('error', 'id is incorrect')
+                messagebox.askokcancel('error', 'id is incorrect')
                 return
         except ValueError as error:
-            messagebox.showerror('error', str(error))
+            messagebox.askokcancel('error', str(error))
             return
         try:
             logged = client.login(identifier=entries_dict['identifier'],
@@ -288,7 +288,7 @@ class SubmitButton(tkinter.Button):
             return
         else:
             if not logged:
-                messagebox.showerror('error logging in',
+                messagebox.askokcancel('error logging in',
                                      'something went wrong. '
                                      'if you id is correct '
                                      'try retyping the password')
@@ -299,26 +299,26 @@ class SubmitButton(tkinter.Button):
                 success = window.log_in_user(entries_dict['identifier'], logged, entries_dict['password'])
                 if not success:
                     return
-                messagebox.showinfo('logged-in',
-                                    'you logged in successfully. you may close this window.')
+                messagebox.askokcancel('logged-in',
+                                       'you logged in successfully. you may close this window.')
 
     @protocol('signup')
     def _signup(self, entries_dict):
         try:
             if not validator.validate_id(entries_dict['identifier']):
-                messagebox.showerror('error', 'id is incorrect')
+                messagebox.askokcancel('error', 'id is incorrect')
                 return
             if not (validator.validate_name(entries_dict['fname']) and validator.validate_name(entries_dict['lname'])):
-                messagebox.showerror('error', 'first or last names are illegal')
+                messagebox.askokcancel('error', 'first or last names are illegal')
                 return
             if not validator.validate_email(entries_dict['email']):
-                messagebox.showerror('error', 'email is illegal')
+                messagebox.askokcancel('error', 'email is illegal')
                 return
             if not validator.validate_password(entries_dict['password']):
-                messagebox.showerror('error', 'password is illegal')
+                messagebox.askokcancel('error', 'password is illegal')
                 return
         except ValueError as error:
-            messagebox.showerror('error', str(error))
+            messagebox.askokcancel('error', str(error))
             return
         try:
             signed = client.signup(identifier=entries_dict['identifier'],
@@ -331,12 +331,12 @@ class SubmitButton(tkinter.Button):
             return
         else:
             if not signed:
-                messagebox.showerror('error signing up',
+                messagebox.askokcancel('error signing up',
                                      'something went wrong. '
                                      'try again later or validate your data with your manager.')
             else:
                 window: MainWindow = self.winfo_toplevel()
-                messagebox.showinfo('signed-up',
+                messagebox.askokcancel('signed-up',
                                     'you signed up successfully. you may close this window.')
                 window.log_in_user(entries_dict['identifier'], signed, entries_dict['password'])
 
@@ -358,9 +358,9 @@ class SubmitButton(tkinter.Button):
             return
         else:
             if result:
-                messagebox.showinfo('Message Sent!', 'The message has been sent to your manager')
+                messagebox.askokcancel('Message Sent!', 'The message has been sent to your manager')
             else:
-                messagebox.showerror('Message was not sent', '')
+                messagebox.askokcancel('Message was not sent', '')
 
     @protocol('update')
     def _show_update(self, entries_dict):
@@ -379,10 +379,10 @@ class SubmitButton(tkinter.Button):
         token = tpl.token
         success = client.delete_user(tpl.manager_id, token, identifier)
         if success:
-            messagebox.showinfo('Deleted!',
+            messagebox.askokcancel('Deleted!',
                                 f'You deleted client {identifier}')
         else:
-            messagebox.showerror('Client wasn\'t deleted', '')
+            messagebox.askokcancel('Client wasn\'t deleted', '')
         tpl.destroy()
 
     @protocol('commit')
@@ -395,10 +395,10 @@ class SubmitButton(tkinter.Button):
         token = tpl.token
         success = client.update_user(tpl.manager_id, token, identifier, entries_dict)
         if success:
-            messagebox.showinfo('Changes Committed!',
-                                f'You changed client {identifier}')
+            messagebox.askokcancel('Changes Committed!',
+                                  f'You changed client {identifier}')
         else:
-            messagebox.showerror('Changes were\'t committed', '')
+            messagebox.askokcancel('Changes were\'t committed', '')
         tpl.destroy()
 
     @protocol('add plate')
@@ -413,9 +413,9 @@ class SubmitButton(tkinter.Button):
                                     plate_number,
                                     user_id)
         if resposne is True:
-            messagebox.showinfo('plate added', 'Plate number added successfully')
+            messagebox.askokcancel('plate added', 'Plate number added successfully')
         else:
-            messagebox.showerror('plate not added', resposne)
+            messagebox.askokcancel('plate not added', resposne)
 
     @protocol('open company')
     def _open_company_window(self, *_):
@@ -426,19 +426,19 @@ class SubmitButton(tkinter.Button):
     def _add_company(self, entries):
         try:
             if not validator.validate_id(entries['identifier']):
-                messagebox.showerror('error', 'id is incorrect')
+                messagebox.askokcancel('error', 'id is incorrect')
                 return
             if not (validator.validate_name(entries['fname']) and validator.validate_name(entries['lname'])):
-                messagebox.showerror('error', 'first or last names are illegal')
+                messagebox.askokcancel('error', 'first or last names are illegal')
                 return
             if not validator.validate_email(entries['email']):
-                messagebox.showerror('error', 'email is illegal')
+                messagebox.askokcancel('error', 'email is illegal')
                 return
             if not validator.validate_password(entries['password']):
-                messagebox.showerror('error', 'password is illegal')
+                messagebox.askokcancel('error', 'password is illegal')
                 return
         except ValueError as error:
-            messagebox.showerror('error', str(error))
+            messagebox.askokcancel('error', str(error))
             return
         tpl = self.winfo_toplevel()
         reason = client.add_company(
@@ -450,12 +450,12 @@ class SubmitButton(tkinter.Button):
             entries['email']
         )
         if isinstance(reason, str):
-            messagebox.showerror('ERROR', reason)
+            messagebox.askokcancel('ERROR', reason)
 
         else:
-            messagebox.showinfo('Success',
-                                'Company was added successfully, log in to see your manager page'
-                                '\nThe Company id is ' + str(reason))
+            messagebox.askokcancel('Success',
+                                   'Company was added successfully, log in to see your manager page'
+                                   '\nThe Company id is ' + str(reason))
 
         tpl.destroy()
 
@@ -471,9 +471,9 @@ class SubmitButton(tkinter.Button):
                                        plate_number,
                                        user_id)
         if resposne is True:
-            messagebox.showinfo('plate removed', 'Vehicle removed successfully')
+            messagebox.askokcancel('plate removed', 'Vehicle removed successfully')
         else:
-            messagebox.showerror('plate not remove', resposne)
+            messagebox.askokcancel('plate not remove', resposne)
 
     def _on_click(self):
         entries = [entry for entry in self.master.winfo_children() if isinstance(entry, CustomEntry)]

@@ -28,15 +28,15 @@ def upload_file():
 def send_file():
     global image_name
     if image_name is None:
-        messagebox.showerror('Error!', 'No image uploaded')
+        messagebox.askokcancel('Error!', 'No image uploaded')
         return
     cv_image = cv2.imread(image_name)
     client = Camera.Camera('127.0.0.1', 1337, 900164)
     recognized = client.recognize(cv_image)
     if recognized:
-        messagebox.showinfo('Gate Open', 'The image passed the checks thus the gate will open')
+        messagebox.askokcancel('Gate Open', 'The image passed the checks thus the gate will open')
         return
-    messagebox.showerror('Error!', 'Image didn\'t passed the checks and the gate will not open')
+    messagebox.askokcancel('Error!', 'Image didn\'t passed the checks and the gate will not open')
 
 
 class MainWindow(tkinter.Tk):
