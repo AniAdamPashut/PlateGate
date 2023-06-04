@@ -75,6 +75,7 @@ class MainWindow(tkinter.Tk):
         self._login_frame.pack(side='left', padx=70, pady=20)
         self._signup_frame.pack(side='right', padx=70, pady=20)
         self._button.place(relx=0.5, rely=0.5, anchor=tkinter.CENTER)
+        self._label = tkinter.Label(self, text='PlateGate', font=('Ariel', 30))
         self._label.pack(anchor='n')
 
     @property
