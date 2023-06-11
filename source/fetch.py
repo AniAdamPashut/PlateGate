@@ -3,7 +3,7 @@ import json
 import source.SugDelek as sd
 import source.SugRechev as sc
 from source.Database import PlateGateDB
-import validator
+import source.validator as validator
 
 
 """

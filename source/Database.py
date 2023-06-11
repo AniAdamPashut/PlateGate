@@ -2,7 +2,7 @@ import random
 import mysql.connector
 import string
 import hashlib
-import validator
+import source.validator as validator
 
 
 class PlateGateDB:

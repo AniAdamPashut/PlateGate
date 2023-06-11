@@ -50,6 +50,11 @@ MESSAGE_HALF = b"!==!"
 
 
 def extract_parameters(data: bytes) -> dict[str, bytes]:
+    """
+    Takes a message that follows the protocol and returns a dictionary of the parameters from the request
+    :param data: The message itself
+    :return: A dictionary with the parameters from the request
+    """
     request_parameters = {}
     for parameter in data.split(b"~~~"):
         if SEP in parameter:
@@ -88,8 +93,6 @@ class Server:
         self._sock = sock
         self._clients = {}
         mailer = Mailing.Mailer('smtp.gmail.com', False)
-        print(CONFIG['MAIL_ADDR'])
-        print(CONFIG['MAIL_PASS'])
         mailer.enter_credentials(CONFIG['MAIL_ADDR'], CONFIG['MAIL_PASS'])
         self._mailer = mailer
 
@@ -99,7 +102,6 @@ class Server:
                 self.KNOWN_REQUESTS[getattr(f, 'name')] = f
 
     def _do_handshake(self, client_id, client, data):
-        print("XOR")
         pubkey, privkey = rsa.newkeys(1024)
         self._clients[client_id][RSA_PRIVATE_KEY] = privkey
         request_parameters = extract_parameters(data)

@@ -23,6 +23,11 @@ def main():
 
 
 class MainWindow(tkinter.Tk):
+    """
+    The Main window of the gui application
+    When logged in holds the identifier - id number - of the logged in user
+    Also holds the token of the user
+    """
     def __init__(self, window_title: str):
         super().__init__()
         self.title(window_title)
@@ -43,6 +48,13 @@ class MainWindow(tkinter.Tk):
         self._button.place(relx=0.5, rely=0.5, anchor=tkinter.CENTER)
 
     def log_in_user(self, identifier, auth_code, password):
+        """
+        Logs in the user
+        :param identifier: The id number of the user
+        :param auth_code: Auth code retrieved from the user.login or user.signup methods
+        :param password: The password of the user
+        :return: True if the log in was success
+        """
         self._password = password
         self._identifier = identifier
         self._logged = True
@@ -68,6 +80,9 @@ class MainWindow(tkinter.Tk):
         return True
 
     def log_out_user(self):
+        """
+        Logs a user out of the system
+        """
         self._logged_in_frame.destroy()
         self._add_plate_frame.destroy()
         self._login_frame = LoginFrame(self)
@@ -89,6 +104,9 @@ class MainWindow(tkinter.Tk):
 
 
 class LoggedInFrame(tkinter.Frame):
+    """
+    The frame for logged users (not managers)
+    """
     def __init__(self, master, user_details: dict[str, bytes]):
         super().__init__(master)
         self.grid_columnconfigure(0, weight=1)
@@ -115,6 +133,9 @@ class LoggedInFrame(tkinter.Frame):
 
 
 class AdminLoggedFrame(tkinter.Frame):
+    """
+    The frame for logged admins
+    """
     def __init__(self, master, user_details: dict[str, bytes]):
         super().__init__(master)
         self.grid_columnconfigure(0, weight=1)
@@ -143,6 +164,9 @@ class AdminLoggedFrame(tkinter.Frame):
 
 
 class AddCompanyWindow(tkinter.Toplevel):
+    """
+    A window to add companies to the system
+    """
     entries = ['fname', 'lname', 'identifier', 'email', 'password', 'company_name']
 
     def __init__(self):
@@ -164,6 +188,9 @@ class AddCompanyWindow(tkinter.Toplevel):
 
 
 class ChangeDetailsWindow(tkinter.Toplevel):
+    """
+    A window to change users details (admin only)
+    """
     details = ['fname', 'lname', 'email']
 
     def __init__(self, identifier, manager_id, token):
@@ -195,6 +222,9 @@ class ChangeDetailsWindow(tkinter.Toplevel):
 
 
 class AddPlate(tkinter.Frame):
+    """
+    A frame to add/remove plates to the system (admin only)
+    """
     def __init__(self, master, identifer, token):
         super().__init__(master, relief='solid', borderwidth=2)
         self.label = tkinter.Label(self, text='Add a license plate')
@@ -210,6 +240,9 @@ class AddPlate(tkinter.Frame):
 
 
 class LoginFrame(tkinter.Frame):
+    """
+    A frame that enables users to log in to the system
+    """
     def __init__(self, master):
         super().__init__(master, relief='solid', borderwidth=2)
         self.button = SubmitButton(self, 'login')
@@ -219,6 +252,9 @@ class LoginFrame(tkinter.Frame):
 
 
 class SignUpFrame(tkinter.Frame):
+    """
+    A frame that enables the users to sign in to the system with a company id
+    """
     def __init__(self, master):
         master_height = master.winfo_height() // 2
         master_width = master.winfo_width() // 2
@@ -234,6 +270,9 @@ class SignUpFrame(tkinter.Frame):
 
 
 class CustomEntry(tkinter.Entry):
+    """
+    Custom tkinter.Entry class to make stuff easier
+    """
     def __init__(self, master, name: str, grid_row: int):
         super().__init__(master)
         self.config(width=30)
@@ -247,6 +286,9 @@ class CustomEntry(tkinter.Entry):
 
 
 class SubmitButton(tkinter.Button):
+    """
+    An extension of the tkinter.Button class. To handle buttons and their commands
+    """
     KNOWN_TYPES = ['signup',
                    'login',
                    'logout',
@@ -274,6 +316,11 @@ class SubmitButton(tkinter.Button):
 
     @protocol('login')
     def _login(self, entries_dict):
+        """
+        command to handle the press of the login button
+        :param entries_dict: A dictionary with all the entries in the parent frame
+        :return: None
+        """
         try:
             if not validator.validate_id(entries_dict['identifier']):
                 messagebox.askokcancel('error', 'id is incorrect')
@@ -289,9 +336,9 @@ class SubmitButton(tkinter.Button):
         else:
             if not logged:
                 messagebox.askokcancel('error logging in',
-                                     'something went wrong. '
-                                     'if you id is correct '
-                                     'try retyping the password')
+                                       'something went wrong. '
+                                       'if you id is correct '
+                                       'try retyping the password')
             else:
                 window = self.winfo_toplevel()
                 if not isinstance(window, MainWindow):
@@ -304,6 +351,11 @@ class SubmitButton(tkinter.Button):
 
     @protocol('signup')
     def _signup(self, entries_dict):
+        """
+        A function that handles the press on the signup button
+        :param entries_dict: The entries of the parent frame
+        :return: None
+        """
         try:
             if not validator.validate_id(entries_dict['identifier']):
                 messagebox.askokcancel('error', 'id is incorrect')
@@ -342,6 +394,11 @@ class SubmitButton(tkinter.Button):
 
     @protocol('logout')
     def _logout(self, *_):
+        """
+        A function that handles the press of the logout button
+        :param _: Discarding all parameters given
+        :return: None
+        """
         window = self.winfo_toplevel()
         if not isinstance(window, MainWindow):
             return
@@ -364,6 +421,11 @@ class SubmitButton(tkinter.Button):
 
     @protocol('update')
     def _show_update(self, entries_dict):
+        """
+        A functions that handles the press of the update button. Open a new window to insert parameters
+        :param entries_dict: The entries in the frame
+        :return: None
+        """
         window = self.winfo_toplevel()
         if not isinstance(window, MainWindow):
             return
@@ -372,6 +434,11 @@ class SubmitButton(tkinter.Button):
 
     @protocol('delete_user')
     def _delete_user(self, *_):
+        """
+        A function to handle the press of the delete button.
+        :param _: Discarding all parameters given
+        :return: None
+        """
         tpl = self.winfo_toplevel()
         if not isinstance(tpl, ChangeDetailsWindow):
             return
@@ -380,13 +447,18 @@ class SubmitButton(tkinter.Button):
         success = client.delete_user(tpl.manager_id, token, identifier)
         if success:
             messagebox.askokcancel('Deleted!',
-                                f'You deleted client {identifier}')
+                                   f'You deleted client {identifier}')
         else:
             messagebox.askokcancel('Client wasn\'t deleted', '')
         tpl.destroy()
 
     @protocol('commit')
     def _commit_to_db(self, entries_dict):
+        """
+        A function that handles the press of the commit button. Commits changes in db with the server
+        :param entries_dict: The entries in the parent frame
+        :return: None
+        """
         print('committing')
         tpl = self.winfo_toplevel()
         if not isinstance(tpl, ChangeDetailsWindow):
@@ -403,6 +475,11 @@ class SubmitButton(tkinter.Button):
 
     @protocol('add plate')
     def _add_plate(self, entries_dict):
+        """
+        A function that handles the press of the add plate button.
+        :param entries_dict: The entries from parent frame
+        :return: None
+        """
         tpl = self.winfo_toplevel()
         if not isinstance(tpl, MainWindow):
             return
@@ -419,11 +496,21 @@ class SubmitButton(tkinter.Button):
 
     @protocol('open company')
     def _open_company_window(self, *_):
+        """
+        A function that handles the press of the open company button. Opens a new window to insert comapny properties
+        :param _: Discarding all parameters
+        :return: None
+        """
         tpl = AddCompanyWindow()
         tpl.mainloop()
 
     @protocol('add company')
     def _add_company(self, entries):
+        """
+        A function that handles the press of the add company button. Send requests to server with parameters from the window
+        :param entries: The entries from the parent frame
+        :return: None
+        """
         try:
             if not validator.validate_id(entries['identifier']):
                 messagebox.askokcancel('error', 'id is incorrect')
@@ -461,6 +548,12 @@ class SubmitButton(tkinter.Button):
 
     @protocol('remove plate')
     def _remove_plate(self, entries):
+        """
+        A function that handles the remove plate button. Sends a request to the server with parameters to removing
+        the plate
+        :param entries: All the entries from the parent frame
+        :return: None
+        """
         tpl = self.winfo_toplevel()
         if not isinstance(tpl, MainWindow):
             return
@@ -476,6 +569,11 @@ class SubmitButton(tkinter.Button):
             messagebox.askokcancel('plate not remove', resposne)
 
     def _on_click(self):
+        """
+        The command of all the buttons. Finds the entries from the parent frame and the function of the button and
+        sends it to the correct function
+        :return: None
+        """
         entries = [entry for entry in self.master.winfo_children() if isinstance(entry, CustomEntry)]
         entries_dict = {entry.name: entry.get() for entry in entries}
         window = self.winfo_toplevel()

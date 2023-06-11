@@ -10,24 +10,25 @@ from PIL import Image, ImageTk
 
 image_name = None
 img = None
+image_button = None
 
 
 def upload_file():
-    global image_name, img
+    global image_name, img, image_button
     f_types = [('Jpg Files', '*.jpg')]
     filename = filedialog.askopenfilename(filetypes=f_types)
     image = Image.open(filename)
     resized = image.resize((400, 300))
     selected_image = ImageTk.PhotoImage(resized)
     img = selected_image
-    b2 = tkinter.Button(window, image=selected_image)
-    b2.grid(row=2, column=1)
+    image_button = tkinter.Button(window, image=img)
+    image_button.grid(row=2, column=1)
     image_name = filename
 
 
 def send_file():
-    global image_name
-    if image_name is None:
+    global image_name, image_button
+    if image_name is None or image_button is None:
         messagebox.askokcancel('Error!', 'No image uploaded')
         return
     cv_image = cv2.imread(image_name)

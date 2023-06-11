@@ -26,6 +26,7 @@ def get_license_plate_from_image(imagename):
     count = 0
     name = 0
 
+    #  Takes the the rectangle with the most area
     for i in cnts:
         perimeter = cv2.arcLength(i, True)
         approx = cv2.approxPolyDP(i, 0.02 * perimeter, True)
