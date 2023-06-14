@@ -1,6 +1,7 @@
 import imutils
 import cv2
 import easyocr
+import pytesseract
 import os
 
 
@@ -28,7 +29,7 @@ def get_license_plate_from_image(image_name):
 
     count = 0
     name = 0
-
+    filename = f'{image_path}_RECOGNIZED.png'
     #  Takes the the rectangle with the most area
     for i in cnts:
         perimeter = cv2.arcLength(i, True)
@@ -37,12 +38,11 @@ def get_license_plate_from_image(image_name):
             x, y, w, h = cv2.boundingRect(i)
             crp_image = image[y:y + h, x:x + w]
             name += 1
-            filename = f'{image_path}_RECOGNIZED.png'
             cv2.imwrite(filename, crp_image)
             break
     if name < 1:
         return False
-    cropped = cv2.imread(f'{name}.png')
+    cropped = cv2.imread(filename)
     reader = easyocr.Reader(['en'])
     result = reader.readtext(cropped)
     if not result:

@@ -304,3 +304,10 @@ class PlateGateDB:
         self._close()
         return val
 
+    def get_entries_by_company_id(self, company_id: str) -> list[dict[str, str]]:
+        self._open()
+        self._cur.execute(f"SELECT * FROM entries WHERE company_id='{company_id}'")
+        val = self._cur.fetchall()
+        self._close()
+        return val
+

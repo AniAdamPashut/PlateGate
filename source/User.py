@@ -165,3 +165,12 @@ class User(Client.Client):
             return True
         else:
             return parameters['REASON']
+
+    def get_entries(self, manager_id: str):
+        msg = create_message(self.type, b"GETENTRIES", {
+            b"MANAGER_ID": manager_id.encode()
+        })
+        decrypted = self._send_and_recv_msg(msg, b"GETENTRIES")
+        parameters = extract_parameters(decrypted)
+        if not parameters['SUCCESS']:
+            return parameters['REASON']

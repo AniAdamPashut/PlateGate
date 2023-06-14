@@ -395,11 +395,13 @@ class Server:
             return
 
         filename = f'ServerImages/{client_id}.jpg'
+        print(filename)
         parameters = extract_parameters(data)
         image_bytes = parameters['IMAGE']
         with open(filename, 'wb') as f:
             f.write(image_bytes)
         license_plate = Recognize.recognize_from_image(filename)
+        print(license_plate)
         if not license_plate:
             message = create_message(b"SRVR", b"RECOGNIZE", {
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
@@ -465,9 +467,11 @@ class Server:
         if sys.platform.startswith('linux'):
             time_now = time.clock_gettime(time.CLOCK_REALTIME)
         else: time_now = time.time()
+        time_readalbe = datetime.datetime.now()
+        print(time_readalbe)
         inserted = db.insert_into('entries',
                                   time_now=time_now,
-                                  time_readable=datetime.datetime.now().isoformat(),
+                                  time_readable=str(time_readalbe),
                                   person_id=vehicle_db['owner_id'],
                                   car_id=vehicle_db['plate_number'],
                                   company_id=company_id)
@@ -663,6 +667,72 @@ class Server:
         encrypted = self._prepare_message(msg, b"ADDCOMPANY", client_public_key)
         client.send(encrypted)
         return
+
+    @protocol(b'GETENTRIES')
+    def _get_entries_from_client(self, client_id, client, data):
+        try:
+            client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
+        except KeyError:
+            return
+        parameters = extract_parameters(data)
+        db = Database.PlateGateDB()
+
+        """
+        Validate manager
+        """
+        requesting_user_id = parameters['MANAGER_ID'].decode()
+        requesting_user = db.get_user_by_id(requesting_user_id)
+        if requesting_user['user_state'] < 2:
+            msg = create_message(b'SRVR', b'GETENTRIES', {
+                b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
+                b"REASON": b"Unauthorized to do such actions"
+            })
+            encrypted = self._prepare_message(msg, b"GETENTRIES", client_public_key)
+            client.send(encrypted)
+            return
+        company_name, company_id = db.get_company_by_user_id(requesting_user_id)
+        entries = db.get_entries_by_company_id(company_id)
+
+
+        """
+        Extract Useful information
+        """
+        def get_full_name_of_user(user_id):
+            user = db.get_user_by_id(user_id)
+            return f"{user['fname']} {user['lname']}"
+
+        for entry in entries:
+            entry.pop('company_id')
+            entry['company_name'] = company_name
+            entry['full_name'] = get_full_name_of_user(entry['person_id'])
+
+        message = create_message(b"SRVR", b"GETENTRIES", {
+            b"SUCCESS": True.to_bytes(True.bit_length(), 'big'),
+            b"STATE": b"SENDING_ENTRIES"
+        })
+        encrypted = self._prepare_message(message, b"GETENTRIES", client_public_key)
+        client.send(encrypted)
+        time.sleep(0.1)
+        for entry in entries:
+            message = create_message(b"SRVR", b"GETENTRIES", {
+                b"ENTRY_ID": entry['entry_id'].encode(),
+                b"TIME": entry['time_readable'].encode(),
+                b"PERSON_ID": entry['person_id'].encode(),
+                b"PERSON_NAME": entry['full_name'].encode(),
+                b"PLATE_NUMBER": entry['car_id'].encode(),
+                b"COMPANY_NAME": entry['company_name'].encode()
+            })
+            encrypted = self._prepare_message(message, b"GETENTRIES", client_public_key)
+            client.send(encrypted)
+            time.sleep(0.01)
+
+        message = create_message(b"SRVR", b"GETENTRIES", {
+            b"SUCCESS": True.to_bytes(True.bit_length(), 'big'),
+            b"STATE": b"FINISHED"
+        })
+        encrypted = self._prepare_message(message, b"GETENTRIES", client_public_key)
+        client.send(encrypted)
+        time.sleep(0.1)
 
     @staticmethod
     def _prepare_message(message: bytes, method: bytes, client_public_key) -> bytes:
