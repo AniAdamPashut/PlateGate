@@ -274,7 +274,7 @@ class Server:
         _, client_company_id = db.get_company_by_user_id(client_id_number.decode())
         print(client_company_id)
         client_manager = db.get_manager_by_company_id(client_company_id)
-        manager_email = db.get_email('users', client_manager)
+        manager_email = db.get_email(client_manager)
         self._mailer.mailto([manager_email], f'Message from {client_id_number.decode()} (PlateGate)', message)
         msg = create_message(b"SRVR", b"MAILMANAGER", {
             b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
@@ -452,8 +452,13 @@ class Server:
             client.send(encrypted)
             logger.info('vehicle not valid')
             return
+        recognized = f'./ServerImages/{client_id}_RECOGNIZED.png'
+        with open(recognized, 'rb') as f:
+            image_bytes = f.read()
+        os.remove(recognized)
         message = create_message(b"SRVR", b"RECOGNIZE", {
-            b"SUCCESS": True.to_bytes(True.bit_length(), 'big')
+            b"SUCCESS": True.to_bytes(True.bit_length(), 'big'),
+            b"RECOGNIZED_IMAGE": image_bytes
         })
         encrypted = self._prepare_message(message, b"RECOGNIZE", client_public_key)
         client.send(encrypted)

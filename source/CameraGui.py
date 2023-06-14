@@ -27,7 +27,7 @@ def upload_file():
 
 
 def send_file():
-    global image_name, image_button
+    global image_name, image_button, img
     if image_name is None or image_button is None:
         messagebox.askokcancel('Error!', 'No image uploaded')
         return
@@ -35,6 +35,16 @@ def send_file():
     client = Camera.Camera('127.0.0.1', 1337, 900164)
     recognized = client.recognize(cv_image)
     if recognized:
+        filename = 'recognized.png'
+        with open(filename, 'wb') as f:
+            f.write(recognized)
+        image = Image.open(filename)
+        selected_image = ImageTk.PhotoImage(image)
+        img = selected_image
+        image_button.destroy()
+        image_button = tkinter.Button(window, image=img)
+        image_button.grid(row=2, column=1)
+        image_name = filename
         messagebox.askokcancel('Gate Open', 'The image passed the checks thus the gate will open')
         return
     messagebox.askokcancel('Error!', 'Image didn\'t passed the checks and the gate will not open')

@@ -8,7 +8,7 @@ from tkinter import messagebox
 client = User.User('127.0.0.1', 1337)
 
 
-def protocol(name):
+def button_press_type(name):
     def inner(method):
         setattr(method, 'registered', True)
         setattr(method, 'name', name)
@@ -103,64 +103,11 @@ class MainWindow(tkinter.Tk):
         return hashlib.sha256(raw.encode()).hexdigest()
 
 
-class LoggedInFrame(tkinter.Frame):
-    """
-    The frame for logged users (not managers)
-    """
-    def __init__(self, master, user_details: dict[str, bytes]):
-        super().__init__(master)
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(2, weight=1)
-        self.header = tkinter.Label(self)
-        self.header.config(text='Details:')
-        self.header.grid(sticky='n', row=0, column=1)
-        self._labels = []
-        index = 1
-        for key in user_details:
-            lbl = tkinter.Label(self)
-            lbl['text'] = f'{key}: {user_details[key].decode()}'
-            lbl.grid(sticky='n', row=index, column=1)
-            self._labels.append(lbl)
-            index += 1
-        self.button = SubmitButton(self, 'logout')
-        self.button.grid(row=index, column=1, sticky='n')
-        self.update_label = tkinter.Label(self)
-        self.update_label['text'] = 'Want to update your information?\nMail your manager'
-        self.update_label.grid(row=0, column=0)
-        self.mail_entry = CustomEntry(self, 'message', 2)
-        self.update_button = SubmitButton(self, 'mail_manager')
-        self.update_button.grid(row=4, column=0)
-
-
-class AdminLoggedFrame(tkinter.Frame):
-    """
-    The frame for logged admins
-    """
-    def __init__(self, master, user_details: dict[str, bytes]):
-        super().__init__(master)
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(2, weight=1)
-        self.header = tkinter.Label(self)
-        self.header.config(text='Details:')
-        self.header.grid(sticky='n', row=0, column=1)
-        self._labels = []
-        index = 1
-        for key in user_details:
-            if key == 'STATE':
-                continue
-            lbl = tkinter.Label(self)
-            lbl['text'] = f'{key}: {user_details[key].decode()}'
-            lbl.grid(sticky='n', row=index, column=1)
-            self._labels.append(lbl)
-            index += 1
-        self.button = SubmitButton(self, 'logout')
-        self.button.grid(row=index, column=1, sticky='n')
-        self.update_label = tkinter.Label(self)
-        self.update_label['text'] = 'Want to update a worker details?\nEnter his id number:'
-        self.update_label.grid(row=0, column=0)
-        self.id_number = CustomEntry(self, 'identifier', 2)
-        self._update_button = SubmitButton(self, 'update')
-        self._update_button.grid(row=3, column=0)
+"""
+----------------------------------------------------------------------------------------
+Top level windows
+----------------------------------------------------------------------------------------
+"""
 
 
 class AddCompanyWindow(tkinter.Toplevel):
@@ -221,6 +168,78 @@ class ChangeDetailsWindow(tkinter.Toplevel):
         return self._identifier
 
 
+"""
+------------------------------------------------------------------------------
+Frames start here
+------------------------------------------------------------------------------
+"""
+
+
+class AdminLoggedFrame(tkinter.Frame):
+    """
+    The frame for logged admins
+    """
+    def __init__(self, master, user_details: dict[str, bytes]):
+        super().__init__(master)
+        self._label = tkinter.Label(self, text='Manager Interface', font=('Ariel', 30))
+        self._label.grid(row=0, column=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=2)
+        self.grid_columnconfigure(2, weight=1)
+        self.header = tkinter.Label(self)
+        self.header.config(text='Details:')
+        self.header.grid(sticky='n', row=1, column=1)
+        self._labels = []
+        index = 3
+        for key in user_details:
+            if key == 'STATE':
+                continue
+            lbl = tkinter.Label(self)
+            lbl['text'] = f'{key}: {user_details[key].decode()}'
+            lbl.grid(sticky='n', row=index, column=1)
+            self._labels.append(lbl)
+            index += 1
+        self.button = SubmitButton(self, 'logout')
+        self.button.grid(row=index, column=1, sticky='n')
+        self.update_label = tkinter.Label(self)
+        self.update_label['text'] = 'Want to update a worker details?\nEnter his id number:'
+        self.update_label.grid(row=4, column=0)
+        self.id_number = CustomEntry(self, 'identifier', 6)
+        self._update_button = SubmitButton(self, 'update')
+        self._update_button.grid(row=7, column=0)
+
+
+class LoggedInFrame(tkinter.Frame):
+    """
+    The frame for logged users (not managers)
+    """
+    def __init__(self, master, user_details: dict[str, bytes]):
+        super().__init__(master)
+        self._label = tkinter.Label(self, text='User Interface', font=('Ariel', 30))
+        self._label.grid(row=0, column=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(2, weight=1)
+        self.header = tkinter.Label(self)
+        self.header.config(text='Details:')
+        self.header.grid(sticky='n', row=3, column=1)
+        self._labels = []
+        index = 4
+        for key in user_details:
+            lbl = tkinter.Label(self)
+            lbl['text'] = f'{key}: {user_details[key].decode()}'
+            lbl.grid(sticky='n', row=index, column=1)
+            self._labels.append(lbl)
+            index += 1
+        self.button = SubmitButton(self, 'logout')
+        self.button.grid(row=index, column=1, sticky='n')
+        self.update_label = tkinter.Label(self)
+        self.update_label['text'] = 'Want to update your information?\nMail your manager'
+        self.update_label.grid(row=3, column=0)
+        self.mail_entry = CustomEntry(self, 'message', 2)
+        self.update_button = SubmitButton(self, 'mail_manager')
+        self.update_button.grid(row=4, column=0)
+
+
 class AddPlate(tkinter.Frame):
     """
     A frame to add/remove plates to the system (admin only)
@@ -245,10 +264,12 @@ class LoginFrame(tkinter.Frame):
     """
     def __init__(self, master):
         super().__init__(master, relief='solid', borderwidth=2)
+        self._label = tkinter.Label(self, text='Login', font=('Ariel', 15))
+        self._label.grid(row=0)
         self.button = SubmitButton(self, 'login')
-        self.identifier = CustomEntry(self, 'identifier', 1)
-        self.password = CustomEntry(self, 'password', 3)
-        self.button.grid(row=4)
+        self.identifier = CustomEntry(self, 'identifier', 2)
+        self.password = CustomEntry(self, 'password', 4)
+        self.button.grid(row=5)
 
 
 class SignUpFrame(tkinter.Frame):
@@ -259,14 +280,16 @@ class SignUpFrame(tkinter.Frame):
         master_height = master.winfo_height() // 2
         master_width = master.winfo_width() // 2
         super().__init__(master, relief='solid', borderwidth=2, width=master_width, height=master_height)
+        self._label = tkinter.Label(self, text='Signup', font=('Ariel', 15))
+        self._label.grid(row=0)
         self.button = SubmitButton(self, 'signup')
-        self.identifier = CustomEntry(self, 'identifier', 1)
-        self.first_name = CustomEntry(self, 'fname', 3)
-        self.last_name = CustomEntry(self, 'lname', 5)
-        self.password = CustomEntry(self, 'password', 7)
-        self.company_id = CustomEntry(self, 'company_id', 9)
-        self.email = CustomEntry(self, 'email', 11)
-        self.button.grid(row=12)
+        self.identifier = CustomEntry(self, 'identifier', 2)
+        self.first_name = CustomEntry(self, 'fname', 4)
+        self.last_name = CustomEntry(self, 'lname', 6)
+        self.password = CustomEntry(self, 'password', 8)
+        self.company_id = CustomEntry(self, 'company_id', 10)
+        self.email = CustomEntry(self, 'email', 12)
+        self.button.grid(row=13)
 
 
 class CustomEntry(tkinter.Entry):
@@ -314,7 +337,7 @@ class SubmitButton(tkinter.Button):
             if callable(f) and getattr(f, 'registered', False):
                 self.KNOWN_REQUESTS[getattr(f, 'name')] = f
 
-    @protocol('login')
+    @button_press_type('login')
     def _login(self, entries_dict):
         """
         command to handle the press of the login button
@@ -349,7 +372,7 @@ class SubmitButton(tkinter.Button):
                 messagebox.askokcancel('logged-in',
                                        'you logged in successfully. you may close this window.')
 
-    @protocol('signup')
+    @button_press_type('signup')
     def _signup(self, entries_dict):
         """
         A function that handles the press on the signup button
@@ -392,7 +415,7 @@ class SubmitButton(tkinter.Button):
                                     'you signed up successfully. you may close this window.')
                 window.log_in_user(entries_dict['identifier'], signed, entries_dict['password'])
 
-    @protocol('logout')
+    @button_press_type('logout')
     def _logout(self, *_):
         """
         A function that handles the press of the logout button
@@ -404,7 +427,7 @@ class SubmitButton(tkinter.Button):
             return
         window.log_out_user()
 
-    @protocol('mail_manager')
+    @button_press_type('mail_manager')
     def _mail_manager(self, entries_dict):
         window = self.winfo_toplevel()
         if not isinstance(window, MainWindow):
@@ -419,7 +442,7 @@ class SubmitButton(tkinter.Button):
             else:
                 messagebox.askokcancel('Message was not sent', '')
 
-    @protocol('update')
+    @button_press_type('update')
     def _show_update(self, entries_dict):
         """
         A functions that handles the press of the update button. Open a new window to insert parameters
@@ -432,7 +455,7 @@ class SubmitButton(tkinter.Button):
         tpl = ChangeDetailsWindow(entries_dict['identifier'], window.identifier, window.token)
         tpl.mainloop()
 
-    @protocol('delete_user')
+    @button_press_type('delete_user')
     def _delete_user(self, *_):
         """
         A function to handle the press of the delete button.
@@ -452,7 +475,7 @@ class SubmitButton(tkinter.Button):
             messagebox.askokcancel('Client wasn\'t deleted', '')
         tpl.destroy()
 
-    @protocol('commit')
+    @button_press_type('commit')
     def _commit_to_db(self, entries_dict):
         """
         A function that handles the press of the commit button. Commits changes in db with the server
@@ -473,7 +496,7 @@ class SubmitButton(tkinter.Button):
             messagebox.askokcancel('Changes were\'t committed', '')
         tpl.destroy()
 
-    @protocol('add plate')
+    @button_press_type('add plate')
     def _add_plate(self, entries_dict):
         """
         A function that handles the press of the add plate button.
@@ -494,7 +517,7 @@ class SubmitButton(tkinter.Button):
         else:
             messagebox.askokcancel('plate not added', resposne)
 
-    @protocol('open company')
+    @button_press_type('open company')
     def _open_company_window(self, *_):
         """
         A function that handles the press of the open company button. Opens a new window to insert comapny properties
@@ -504,7 +527,7 @@ class SubmitButton(tkinter.Button):
         tpl = AddCompanyWindow()
         tpl.mainloop()
 
-    @protocol('add company')
+    @button_press_type('add company')
     def _add_company(self, entries):
         """
         A function that handles the press of the add company button. Send requests to server with parameters from the window
@@ -546,7 +569,7 @@ class SubmitButton(tkinter.Button):
 
         tpl.destroy()
 
-    @protocol('remove plate')
+    @button_press_type('remove plate')
     def _remove_plate(self, entries):
         """
         A function that handles the remove plate button. Sends a request to the server with parameters to removing

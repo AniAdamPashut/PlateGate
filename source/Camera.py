@@ -21,7 +21,7 @@ class Camera(Client.Client):
         parameters = Client.extract_parameters(response)
         if parameters.get('SUCCESS', False):
             print("open thy gate")
-            return True
+            return parameters['RECOGNIZED_IMAGE']
         print(parameters['REASON'])
         return False
 

@@ -1,10 +1,13 @@
 import imutils
 import cv2
 import easyocr
+import os
 
 
-def get_license_plate_from_image(imagename):
-    image = cv2.imread(imagename)
+def get_license_plate_from_image(image_name):
+    image_path = image_name.split('.')[0]
+    image = cv2.imread(image_name)
+    os.remove(image_name)
     # resize the image
     image = imutils.resize(image, width=500)
 
@@ -34,7 +37,8 @@ def get_license_plate_from_image(imagename):
             x, y, w, h = cv2.boundingRect(i)
             crp_image = image[y:y + h, x:x + w]
             name += 1
-            cv2.imwrite(str(name) + '.png', crp_image)
+            filename = f'{image_path}_RECOGNIZED.png'
+            cv2.imwrite(filename, crp_image)
             break
     if name < 1:
         return False
@@ -52,5 +56,5 @@ def get_digits(string: str):
     return ''.join(list(filter(lambda x: x.isdigit(), string)))
 
 
-def recognize_from_image(image):
-    return get_digits(get_license_plate_from_image(image))
+def recognize_from_image(image_name: str):
+    return get_digits(get_license_plate_from_image(image_name))
