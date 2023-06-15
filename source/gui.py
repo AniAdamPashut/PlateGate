@@ -68,10 +68,8 @@ class MainWindow(tkinter.Tk):
         self._signup_frame.destroy()
         self._label.destroy()
         if int.from_bytes(state, 'big') > 1:
-            self._logged_in_frame = AdminLoggedFrame(self, details)
-            self._add_plate_frame = AddPlate(self, identifier, self.token)
-            self._add_plate_frame.pack(side='right', padx=70, pady=20)
-            self._logged_in_frame.pack(side='left', padx=70, pady=20)
+            self._logged_in_frame = AdminLoggedFrame(self, details, identifier, self.token)
+            self._logged_in_frame.pack(anchor='center', padx=70, pady=20)
         else:
             details.pop('COMPANY_ID')
             self._logged_in_frame = LoggedInFrame(self, details)
@@ -168,6 +166,32 @@ class ChangeDetailsWindow(tkinter.Toplevel):
         return self._identifier
 
 
+class ViewEntries(tkinter.Toplevel):
+    key_to_column = {
+        'ENTRY_ID': 0,
+        'TIME': 1,
+        'PERSON_ID': 2,
+        'PERSON_NAME': 3,
+        'PLATE_NUMBER': 4,
+        'COMPANY_NAME': 5
+    }
+
+    def __init__(self, entry_values: list[dict[str, bytes]]):
+        super().__init__()
+        curr_row = 0
+        for key, value in self.key_to_column.items():
+            lbl = tkinter.Label(self, text=key)
+            lbl.grid(row=curr_row, column=value)
+        curr_row += 1
+        for entry in entry_values:
+            for key, value in entry.items():
+                lbl = tkinter.Label(self, text=value.decode())
+                try:
+                    lbl.grid(row=curr_row, column=self.key_to_column[key])
+                except KeyError:
+                    pass
+            curr_row += 1
+
 """
 ------------------------------------------------------------------------------
 Frames start here
@@ -179,13 +203,16 @@ class AdminLoggedFrame(tkinter.Frame):
     """
     The frame for logged admins
     """
-    def __init__(self, master, user_details: dict[str, bytes]):
+    def __init__(self, master, user_details: dict[str, bytes], identifier, token):
         super().__init__(master)
+        self._add_plate_frame = AddPlate(self, identifier, token)
+        self._add_plate_frame.grid(row=1, column=2)
         self._label = tkinter.Label(self, text='Manager Interface', font=('Ariel', 30))
         self._label.grid(row=0, column=1)
         self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=2)
+        self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(2, weight=1)
+        self.grid_columnconfigure(3, weight=1)
         self.header = tkinter.Label(self)
         self.header.config(text='Details:')
         self.header.grid(sticky='n', row=1, column=1)
@@ -207,6 +234,8 @@ class AdminLoggedFrame(tkinter.Frame):
         self.id_number = CustomEntry(self, 'identifier', 6)
         self._update_button = SubmitButton(self, 'update')
         self._update_button.grid(row=7, column=0)
+        self._view_entries = SubmitButton(self, 'get entries')
+        self._view_entries.grid(row=0, column=3)
 
 
 class LoggedInFrame(tkinter.Frame):
@@ -322,7 +351,8 @@ class SubmitButton(tkinter.Button):
                    'add plate',
                    'remove plate',
                    'open company',
-                   'add company']
+                   'add company',
+                   'get entries']
     KNOWN_REQUESTS = {}
 
     def __init__(self, master, button_type: str):
@@ -590,6 +620,16 @@ class SubmitButton(tkinter.Button):
             messagebox.askokcancel('plate removed', 'Vehicle removed successfully')
         else:
             messagebox.askokcancel('plate not remove', resposne)
+
+    @button_press_type('get entries')
+    def _get_entries(self, *_):
+        tpl = self.winfo_toplevel()
+        if not isinstance(tpl, MainWindow):
+            return
+        manager_id = tpl.identifier
+        entries = client.get_entries(str(manager_id))
+        entries_view = ViewEntries(entries)
+        entries_view.mainloop()
 
     def _on_click(self):
         """

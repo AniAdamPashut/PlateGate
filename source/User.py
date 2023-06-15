@@ -1,3 +1,5 @@
+import socket
+
 import Client
 
 create_message = Client.create_message
@@ -174,3 +176,22 @@ class User(Client.Client):
         parameters = extract_parameters(decrypted)
         if not parameters['SUCCESS']:
             return parameters['REASON']
+
+        if not parameters.get('STATE', '') == b'SENDING_ENTRIES':
+            return
+
+        data = b""
+        print("GETTING ENTRIES")
+        with socket.create_connection((self._ip, 1357)) as sock:
+            print("FETCHING ALL ENTRIES")
+            while not parameters.get('STATE', '') == b'FINISHED':
+                new_data = self.get_all_data(sock)
+                decrypted = self.decrypt_message(new_data)
+                parameters = extract_parameters(decrypted)
+                data += decrypted
+        print('-------------------------------------')
+        print(data)
+        entries = data.split(b"###")[:-1]
+        print(entries)
+        entry_values = [extract_parameters(entry) for entry in entries]
+        return entry_values

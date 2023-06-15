@@ -6,7 +6,6 @@ import logging
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 
-
 SEP = b"8===D<"
 MESSAGE_END = b"###"
 MESSAGE_HALF = b"!==!"
@@ -96,17 +95,23 @@ class Client:
         encrypted = encrypted_info + MESSAGE_HALF + encrypted_data + MESSAGE_END
         with socket.create_connection((self._ip, self._port)) as sock:
             sock.send(encrypted)
-            data = sock.recv(1024)
-            while not data.endswith(MESSAGE_END):
-                data += sock.recv(1024)
+            data = self.get_all_data(sock)
 
-            data = data[:-len(MESSAGE_END)]
-
-            if MESSAGE_HALF in data:
-                info, content = data.split(MESSAGE_HALF)
-            else:
+            if not (MESSAGE_HALF in data):
                 return data
 
+        return self.decrypt_message(data)
+
+    @staticmethod
+    def get_all_data(sock):
+        data = sock.recv(1024)
+        while not data.endswith(MESSAGE_END):
+            data += sock.recv(1024)
+        data = data[:-len(MESSAGE_END)]
+        return data
+
+    def decrypt_message(self, data: bytes):
+        info, content = data.split(MESSAGE_HALF)
         decrypted_info = rsa.decrypt(info, self._private_key)
         parameters = extract_parameters(decrypted_info)
 

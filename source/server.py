@@ -669,7 +669,7 @@ class Server:
         return
 
     @protocol(b'GETENTRIES')
-    def _get_entries_from_client(self, client_id, client, data):
+    def _get_entries(self, client_id, client, data):
         try:
             client_public_key = self._clients[client_id][RSA_PUBLIC_KEY]
         except KeyError:
@@ -706,24 +706,36 @@ class Server:
             entry['company_name'] = company_name
             entry['full_name'] = get_full_name_of_user(entry['person_id'])
 
+        port = 1357
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if sys.platform[:5] == 'linux':
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        sock.bind(('0.0.0.0', port))
+        sock.listen()
         message = create_message(b"SRVR", b"GETENTRIES", {
             b"SUCCESS": True.to_bytes(True.bit_length(), 'big'),
             b"STATE": b"SENDING_ENTRIES"
         })
         encrypted = self._prepare_message(message, b"GETENTRIES", client_public_key)
         client.send(encrypted)
-        time.sleep(0.1)
+        entries_client, client_addr = sock.accept()
+        new_client_id = hashlib.sha256(str(client_addr[0]).encode()).hexdigest()
+        while new_client_id != client_id:
+            entries_client.close()
+            entries_client, client_addr = sock.accept()
+            new_client_id = hashlib.sha256(str(client_addr[0]).encode()).hexdigest()
         for entry in entries:
             message = create_message(b"SRVR", b"GETENTRIES", {
-                b"ENTRY_ID": entry['entry_id'].encode(),
+                b"ENTRY_ID": str(entry['entry_id']).encode(),
                 b"TIME": entry['time_readable'].encode(),
-                b"PERSON_ID": entry['person_id'].encode(),
+                b"PERSON_ID": str(entry['person_id']).encode(),
                 b"PERSON_NAME": entry['full_name'].encode(),
-                b"PLATE_NUMBER": entry['car_id'].encode(),
+                b"PLATE_NUMBER": str(entry['car_id']).encode(),
                 b"COMPANY_NAME": entry['company_name'].encode()
             })
             encrypted = self._prepare_message(message, b"GETENTRIES", client_public_key)
-            client.send(encrypted)
+            entries_client.send(encrypted)
             time.sleep(0.01)
 
         message = create_message(b"SRVR", b"GETENTRIES", {
@@ -731,7 +743,7 @@ class Server:
             b"STATE": b"FINISHED"
         })
         encrypted = self._prepare_message(message, b"GETENTRIES", client_public_key)
-        client.send(encrypted)
+        entries_client.send(encrypted)
         time.sleep(0.1)
 
     @staticmethod
