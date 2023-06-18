@@ -1,0 +1,10 @@
+cryptography==40.0.2
+easyocr==1.7.0
+imutils==0.5.4
+mysql_connector_repackaged==0.3.1
+numpy==1.25.0
+Pillow==9.5.0
+pytesseract==0.3.10
+python-dotenv==1.0.0
+Requests==2.31.0
+rsa==4.9
