@@ -1,4 +1,3 @@
-import logging
 import os
 import random
 import socket
@@ -19,14 +18,6 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 
 CONFIG = dotenv.dotenv_values('.env')
-
-logging.basicConfig(filename='serverlogs.log',
-                    format='%(asctime)s %(message)s',
-                    filemode='w')
-
-logger = logging.getLogger()
-
-logger.setLevel(logging.DEBUG)
 
 
 def protocol(name):

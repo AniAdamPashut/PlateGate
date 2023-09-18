@@ -2,21 +2,13 @@ import os
 import socket
 import rsa
 import base64
-import logging
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
+
 
 SEP = b"8===D<"
 MESSAGE_END = b"###"
 MESSAGE_HALF = b"!==!"
-
-logging.basicConfig(filename='clientlog.log',
-                    format='%(message)s',
-                    filemode='w')
-
-logger = logging.getLogger()
-
-logger.setLevel(logging.DEBUG)
 
 
 def extract_parameters(data: bytes) -> dict[str, bytes]:
