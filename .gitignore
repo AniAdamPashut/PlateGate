@@ -1,5 +1,5 @@
 *.sql
 *.json
 source/.env
-Database
-.idea
+Database/
+.idea/
