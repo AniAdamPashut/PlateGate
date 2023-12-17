@@ -5,3 +5,4 @@ Database/
 .idea/
 .venv/
 *__pycache__*
+tests/

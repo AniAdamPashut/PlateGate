@@ -1,7 +1,8 @@
 # PlateGate
 
 ## Todo
-- Write better tests
+- Rewrite tests
+- factor project
 
 
 A project for Israeli final exam (Bagrut) in managing and programming systems
