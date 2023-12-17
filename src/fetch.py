@@ -1,9 +1,9 @@
 import requests
 import json
-import source.SugDelek as sd
-import source.SugRechev as sc
-from source.Database import PlateGateDB
-import source.validator as validator
+import SugDelek as sd
+import SugRechev as sc
+import validator 
+from Database import PlateGateDB
 
 
 """

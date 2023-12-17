@@ -17,7 +17,7 @@ import base64
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 
-CONFIG = dotenv.dotenv_values('.env')
+CONFIG = dotenv.dotenv_values('src/.env')
 
 
 def protocol(name):

@@ -2,7 +2,7 @@ import random
 import mysql.connector
 import string
 import hashlib
-import source.validator as validator
+import validator
 
 
 class PlateGateDB:
@@ -10,9 +10,9 @@ class PlateGateDB:
         self._conn = None
         self._cur = None
         self._hostname = 'localhost'
-        self._username = 'root'
-        self._passwd = ''
-        self._db_name = 'PlateGateDB'
+        self._username = 'benami'
+        self._passwd = 'mineben123'
+        self._db_name = 'plategatedb'
 
     def _open(self):
         self._conn = mysql.connector.connect(

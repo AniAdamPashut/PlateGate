@@ -39,7 +39,6 @@ class Client:
         self._do_handshake()
 
     def _do_handshake(self):
-        logger.info("Xor started")
         pubkey, privkey = rsa.newkeys(1024)
         self._private_key = privkey
         rand_message = os.urandom(16)
@@ -65,10 +64,9 @@ class Client:
         try:
             rsa.verify(request_parameters['MESSAGE'], request_parameters['SIGNATURE'], server_public_key)
         except rsa.pkcs1.VerificationError:
-            logging.error("Something went wrong, reconnecting...")
             self._do_handshake()
         finally:
-            logger.info("Xor Ended")
+            print("xor ended")
 
     def _send_and_recv_msg(self, msg, method):
         print(msg)

@@ -3,3 +3,5 @@
 source/.env
 Database/
 .idea/
+.venv/
+*__pycache__*
