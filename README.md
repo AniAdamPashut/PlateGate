@@ -2,9 +2,12 @@
 
 > Fully featured system to manage closed parking spaces
 
+I will fix this when the time comes <br>
+
 ## Todo
 - Rewrite tests
 - split files to independent packages
+- probably more stuff then this that i can't think of
 
 ## How to build
 ### Although this is probably too old to run perfectly (or run at all)
