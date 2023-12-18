@@ -70,7 +70,7 @@ def generate_random_string(length: int):
 class Server:
     CLIENT_LIMIT = 100
     PORT = 1337
-    KNOWN_CLIENTS = [b"USER", b"CMRA"]
+    KNOWN_CLIENTS = {b"USER", b"CMRA"}
     KNOWN_REQUESTS = {}
 
     def __init__(self):
@@ -431,7 +431,7 @@ class Server:
             vehicle_gov.sug_delek.value == vehicle_db['sug_delek'],
             vehicle_gov.sug_rechev.value == vehicle_db['sug_rechev'],
             vehicle_db['vehicle_state'] >= 0,
-            vehicle_gov.active,
+            vehicle_gov.active(),
             not vehicle_gov.totaled
         ]  # Validate vehicle with data.gov.il
         is_valid = all(validation_list)
@@ -510,7 +510,7 @@ class Server:
             encrypted = self._prepare_message(message, b"ADDPLATE", client_public_key)
             client.send(encrypted)
             return
-        if vehicle.totaled or not vehicle.active:
+        if vehicle.totaled or not vehicle.active():
             message = create_message(b"SRVR", b"ADDPLATE", {
                 b"SUCCESS": False.to_bytes(False.bit_length(), 'big'),
                 b"REASON": b"VEHICLE IS NOT ACTIVE OR TOTAL LOSS"

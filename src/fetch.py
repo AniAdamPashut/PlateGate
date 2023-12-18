@@ -59,7 +59,7 @@ class GovApiFetcher:
             'resource_id': res_id,
             'q': json.dumps(query)
         }).json()
-        is_active = response['result']['records']
+        is_active = responsea['result']['records']
         response = requests.get(cls.URL, params={
             'resource_id': cls.FINAL_CANCELLATION_RESOURCE_ID,
             'q': json.dumps(query)
@@ -96,7 +96,6 @@ class Vehicle:
     def shnat_yitsur(self):
         return int(self._shnat_yetsur)
 
-    @property
     def active(self):
         return GovApiFetcher.is_car_active(self)
 
@@ -104,7 +103,6 @@ class Vehicle:
     def sug_rechev(self):
         return self._sug_rechev
 
-    @property
     def valid(self):
         if self.totaled or not self.active:
             return False

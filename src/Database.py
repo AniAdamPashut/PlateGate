@@ -3,16 +3,24 @@ import mysql.connector
 import string
 import hashlib
 import validator
+import dotenv
 
 
-class PlateGateDB:
-    def __init__(self):
+class BaseDB():
+    def __init__(
+        self, 
+        hostname: str,
+        username: str,
+        passwd: str,
+        db: str
+    ):
         self._conn = None
         self._cur = None
-        self._hostname = 'localhost'
-        self._username = 'benami'
-        self._passwd = 'mineben123'
-        self._db_name = 'plategatedb'
+
+        self._hostname = hostname
+        self._username = username
+        self._passwd = passwd
+        self._db_name = db
 
     def _open(self):
         self._conn = mysql.connector.connect(
@@ -26,6 +34,19 @@ class PlateGateDB:
     def _close(self):
         self._cur.close()
         self._conn.close()
+
+
+class PlateGateDB(BaseDB):
+    def __init__(self):
+        CONFIG = dotenv.dotenv_values('src/.env')
+        super().__init__(
+            'localhost',
+            'benami',
+            CONFIG['DB_PASSWORD'],
+            'plategatedb'
+        )
+
+
 
     def select_all(self, table_name: str):
         self._open()
